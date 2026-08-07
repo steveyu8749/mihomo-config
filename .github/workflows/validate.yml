@@ -1,0 +1,42 @@
+name: Validate Mihomo template
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "config.example.yaml"
+      - "scripts/validate_config.py"
+      - ".github/workflows/validate.yml"
+  pull_request:
+    paths:
+      - "config.example.yaml"
+      - "scripts/validate_config.py"
+      - ".github/workflows/validate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate config
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install validator dependency
+        run: python -m pip install --disable-pip-version-check PyYAML
+
+      - name: Validate public template
+        run: python scripts/validate_config.py config.example.yaml
