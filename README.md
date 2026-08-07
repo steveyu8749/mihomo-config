@@ -14,7 +14,7 @@
 
 ## 文件
 
-- `config.example.yaml`：完整公开模板，已经移除真实订阅地址、Token、服务器地址和 UUID。
+- `config.example.yaml`：完整公开模板，已经移除真实订阅地址、Token、私有服务器地址、UUID 和个人自定义规则源。
 - `CHANGELOG.md`：记录配置设计上的重要调整。
 - `docs/design-notes.md`：解释 TUN、DNS、Sniffer 等关键设计取舍。
 - `.gitignore`：避免实际使用的私密配置被误提交。
@@ -27,10 +27,11 @@
    cp config.example.yaml config.yaml
    ```
 
-2. 在 `config.yaml` 中替换：
-   - 机场订阅 URL / Token
-   - 自建节点服务器地址
-   - VLESS UUID
+2. 在 `config.yaml` 中替换所有占位内容：
+   - `YOUR_TOKEN_A / B / C`：机场订阅 Token，并同时替换对应订阅 URL
+   - `your-vps.example.com`：自建节点服务器地址与 SNI
+   - `00000000-0000-4000-8000-000000000000`：VLESS UUID
+   - `YOUR_GITHUB_USERNAME / YOUR_RULE_REPO`：可选的个人 ProxyLite 规则源
    - 其他只属于你自己的节点或规则
 
 3. `config.yaml` 已被 `.gitignore` 忽略，**不要强制提交真实配置**。
