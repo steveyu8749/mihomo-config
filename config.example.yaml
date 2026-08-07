@@ -1,3 +1,240 @@
-# Placeholder: sanitized Mihomo V4 template.
-# This file will be populated from the reviewed V4 configuration.
-# Replace subscription URLs, UUIDs, and private server information before use.
+# ============================================================================== 
+# Mihomo V4 - 公开脱敏模板
+# 使用场景：手机 / 电脑本机运行 Mihomo，主要通过 TUN 接管系统流量。
+# 设计目标：
+#   1. 保留原有成熟的国内直连 / 国外代理分流习惯；
+#   2. 尽量精简，不重复声明 Mihomo 默认值；
+#   3. 局域网/链路本地/组播/广播流量尽量在 TUN 路由层直接排除；
+#   4. Sniffer 主要用于恢复域名和分流，不让 TLS/QUIC 嗅探结果改写真实连接目标；
+#   5. 使用 YAML Anchor 合并重复配置，降低长期维护成本。
+# 注意：
+#   - 本文件不托管 Zashboard，Clash Verge Rev 等客户端自身已有 UI。
+#   - IPv6 当前仍显式关闭，后续若需要排查局域网发现问题，可单独做 A/B 测试。
+#   - 本模板已移除真实订阅 URL、Token、UUID 与私有服务器信息；使用前请替换占位符。
+# ============================================================================== 
+
+# ============================================================================== 
+# 代理提供器（机场订阅）
+# ============================================================================== 
+# 统一管理三个机场订阅；第一个 Provider 同时作为 YAML Anchor 公共模板。
+proxy-providers:                                          # 机场订阅 Provider 总表
+  Provider_A: &airport                                    # 订阅 A；同时定义 Provider 公共锚点 &airport
+    type: http                                            # 通过 HTTP(S) URL 拉取订阅内容
+    url: "https://example.com/provider-a/subscribe?token=YOUR_TOKEN_A"  # 订阅地址占位符
+    interval: 18000                                       # 每 5 小时刷新一次订阅
+    proxy: 直连                                            # 订阅文件本身通过硬 DIRECT 下载
+    health-check:                                         # Provider 节点可用性检查
+      enable: true                                        # 启用当前模块
+      url: https://www.gstatic.com/generate_204           # 轻量 204 健康检查地址
+      interval: 600                                       # 每 10 分钟检查一次
+
+  Provider_B:                                             # 订阅 B Provider
+    <<: *airport                                          # 继承公共 Provider 设置
+    url: "https://example.com/provider-b/subscribe?token=YOUR_TOKEN_B"  # 订阅地址占位符
+
+  Provider_C:                                             # 订阅 C Provider
+    <<: *airport                                          # 继承公共 Provider 设置
+    url: "https://example.com/provider-c/subscribe?token=YOUR_TOKEN_C"  # 订阅地址占位符
+
+# ============================================================================== 
+# 手工节点
+# ============================================================================== 
+# 保留一个硬 DIRECT 出站和一个 VLESS Vision 示例节点。
+proxies:                                                  # 手工定义的本地出站节点
+  - {name: 直连, type: direct}                             # 硬 DIRECT 出站，供规则和策略组引用
+  - {name: "🇺🇸 Custom-VLESS", type: vless, server: your-vps.example.com, port: 443, uuid: 00000000-0000-4000-8000-000000000000, network: tcp, tls: true, udp: true, flow: xtls-rprx-vision, servername: your-vps.example.com, client-fingerprint: chrome, alpn: [h2, http/1.1]}  # 示例节点；请替换 server / uuid / servername
+
+# ============================================================================== 
+# 全局基础设置
+# ============================================================================== 
+# 定义本地代理入口、核心网络行为、状态持久化和仅本机可访问的控制 API。
+mixed-port: 7893                                          # HTTP(S) + SOCKS5 混合代理入口
+redir-port: 7892                                          # 备用 REDIRECT 透明代理入口，仅 TCP
+tproxy-port: 7894                                         # 备用 TProxy 透明代理入口，可处理 TCP/UDP
+ipv6: false                                               # 全局关闭 IPv6，当前作为兼容性基线
+unified-delay: true                                       # 统一延迟计算方式，减少不同协议测试偏差
+tcp-concurrent: true                                      # 同一目标可并发尝试多个 IP，加快建连
+log-level: warning                                        # 只记录 warning 及以上日志，减少日常噪声
+find-process-mode: strict                                 # 进程匹配模式；用于桌面端 PROCESS-NAME 分流
+
+profile:                                                  # 需要跨重启保存的运行状态
+  store-selected: true                                    # 记住各 select 策略组上次选择
+  store-fake-ip: true                                     # 持久化 Fake-IP 与域名映射
+
+external-controller: 127.0.0.1:9090                      # 仅本机开放 Mihomo API，不暴露给局域网
+
+# ============================================================================== 
+# 域名嗅探（Sniffer）
+# ============================================================================== 
+# 作用：从 HTTP Host、TLS SNI、QUIC 握手中恢复域名，让域名规则在 TUN 场景继续生效。
+# 原则：纯 IP 流量尝试恢复域名；TLS/QUIC 只用于识别和分流，不改写原始目标。
+sniffer:                                                  # 域名嗅探配置
+  enable: true                                            # 启用当前模块
+  parse-pure-ip: true                                     # 仅有目标 IP 时也尝试从协议中恢复域名
+  override-destination: false                             # 全局只利用嗅探域名分流，不改写原始目标
+  sniff:                                                  # 声明允许嗅探的协议与端口
+    HTTP:                                                 # HTTP Host 嗅探
+      ports: [80, 8080-8880]                              # 常见 HTTP 端口范围
+      override-destination: true                          # 仅 HTTP 使用 Host 作为实际目标
+    TLS:                                                  # TLS SNI 嗅探
+      ports: [443, 8443]                                  # 常见 HTTPS / QUIC 端口范围
+    QUIC:                                                 # QUIC/HTTP3 初始握手域名嗅探
+      ports: [443, 8443]                                  # 常见 HTTPS / QUIC 端口范围
+  skip-domain:                                            # 明确有兼容性理由的嗅探例外
+    - Mijia Cloud                                         # 米家特殊 hostname
+    - dlg.io.mi.com                                       # 小米兼容
+    - "+.wechat.com"                                      # 微信兼容
+    - "+.wechatapp.com"                                   # 微信小程序相关域名跳过嗅探
+    - "+.qpic.cn"                                         # 腾讯图片/CDN 域名跳过嗅探
+    - "+.qq.com"                                          # QQ/腾讯域名跳过嗅探
+    - "+.push.apple.com"                                  # Apple Push 长连接
+
+# ============================================================================== 
+# TUN 入站
+# ============================================================================== 
+# 手机端实现系统级代理通常依赖 VPN/TUN；电脑端 TUN 也能覆盖比系统代理更广的流量。
+tun:                                                      # TUN 系统级接管配置
+  enable: true                                            # 启用当前模块
+  stack: mixed                                            # 使用 mixed 网络栈，兼顾性能与兼容性
+  dns-hijack:                                             # 将普通 53 端口 DNS 请求交给 Mihomo DNS
+    - any:53                                              # 劫持 UDP 53 DNS
+    - tcp://any:53                                        # 劫持 TCP 53 DNS
+  auto-route: true                                        # 自动写入系统路由，把普通流量导入 TUN
+  auto-detect-interface: true                             # 自动识别当前真实联网接口
+  route-exclude-address:                                  # 这些目标网段完全绕过 TUN
+    - 10.0.0.0/8                                          # RFC1918 私网
+    - 172.16.0.0/12                                       # RFC1918 私网
+    - 192.168.0.0/16                                      # RFC1918 私网，家庭 LAN 最常见
+    - 169.254.0.0/16                                      # IPv4 Link-local
+    - 224.0.0.0/4                                         # IPv4 Multicast（含 mDNS 等）
+    - 255.255.255.255/32                                  # Limited Broadcast
+    # - 100.64.0.0/10                                     # 可选：RFC6598 / CGNAT；需要其绕过 TUN 时取消注释
+
+# ============================================================================== 
+# DNS
+# ============================================================================== 
+# 采用 Fake-IP；国内/私有及少量兼容域名返回 Real-IP，默认主 DNS 使用国内 DoH。
+dns:                                                      # Mihomo 内置 DNS 配置
+  enable: true                                            # 启用当前模块
+  ipv6: false                                             # DNS 不返回/处理 IPv6 结果，与全局设置保持一致
+  enhanced-mode: fake-ip                                  # 启用 Fake-IP 模式
+  fake-ip-range: 198.18.0.1/16                            # Fake-IP 地址池
+  fake-ip-filter-mode: rule                               # 按规则顺序明确决定 Real-IP / Fake-IP
+  fake-ip-filter:                                         # Fake-IP 例外与最终兜底规则
+    - RULE-SET,private_domain,real-ip                     # 私有域名返回真实 IP
+    - RULE-SET,cn_domain,real-ip                          # 中国域名返回真实 IP，偏兼容性取向
+    - DOMAIN-SUFFIX,local,real-ip                         # .local 本地域名返回真实 IP
+    - DOMAIN-SUFFIX,home.arpa,real-ip                     # 家庭网络服务发现域返回真实 IP
+    - DOMAIN-SUFFIX,msftconnecttest.com,real-ip           # Windows 连通性检测返回真实 IP
+    - DOMAIN-SUFFIX,msftncsi.com,real-ip                  # Windows NCSI 检测返回真实 IP
+    - DOMAIN-SUFFIX,services.googleapis.cn,real-ip        # Google 中国服务兼容项
+    - DOMAIN-SUFFIX,xn--ngstr-lra8j.com,real-ip           # Google Play 中国相关兼容域名
+    - DOMAIN-WILDCARD,time.*.com,real-ip                  # 常见时间同步域名返回真实 IP
+    - DOMAIN-SUFFIX,pool.ntp.org,real-ip                  # NTP 服务器域名返回真实 IP
+    - MATCH,fake-ip                                       # 其余域名统一返回 Fake-IP
+  default-nameserver:                                     # Bootstrap DNS，仅用于解析 DNS 上游自身域名
+    - 223.5.5.5                                           # AliDNS 纯 IP Bootstrap DNS
+    - 119.29.29.29                                        # DNSPod 纯 IP Bootstrap DNS
+  nameserver:                                             # Mihomo 默认主 DNS 上游
+    - https://dns.alidns.com/dns-query                    # AliDNS DoH；国内直连稳定且查询链路加密
+    - https://doh.pub/dns-query                           # DNSPod DoH；第二个国内加密 DNS 上游
+  direct-nameserver:                                      # 最终确定 DIRECT 后用于真实 IP 解析的 DNS
+    - system                                              # 跟随当前系统/路由器/运营商 DNS 解析 DIRECT 目标
+
+# ============================================================================== 
+# 策略组
+# ============================================================================== 
+# 业务组负责“走哪个出口”，地区组负责筛选节点，fallback/url-test 负责自动切换。
+proxy-groups:                                             # 所有可在客户端选择或自动决策的策略组
+  - {name: 🚀 默认代理, type: select, proxies: [🌐 全部节点, 🔯 香港故转, 🔯 日本故转, ♻️ 香港自动, ♻️ 日本自动, ♻️ 美国自动, ♻️ 自动选择, 🇭🇰 香港节点, 🇯🇵 日本节点, 🇺🇲 美国节点, 直连]}  # 日常总入口
+  - {name: 🌐 全部节点, type: select, include-all: true, exclude-type: direct}  # 汇总所有代理节点并排除 direct 类型
+  - &service {name: 🐟 漏网之鱼, type: select, proxies: [🚀 默认代理, 🌐 全部节点, 🎯 直连, 🔯 香港故转, 🔯 日本故转, ♻️ 香港自动, ♻️ 日本自动, ♻️ 美国自动, ♻️ 自动选择, 🇭🇰 香港节点, 🇯🇵 日本节点, 🇺🇲 美国节点]}  # 业务策略组公共模板
+  - {<<: *service, name: 🤖 ChatGPT}                       # ChatGPT 独立策略组
+  - {<<: *service, name: 📹 YouTube}                       # YouTube 独立策略组
+  - {<<: *service, name: 🍀 Google}                        # Google 独立策略组
+  - {<<: *service, name: 👨🏿‍💻 GitHub}                     # GitHub 独立策略组
+  - {<<: *service, name: 🐬 OneDrive}                      # OneDrive 独立策略组
+  - {<<: *service, name: 🪟 Microsoft}                     # Microsoft 独立策略组
+  - {<<: *service, name: 🎵 TikTok}                        # TikTok 独立策略组
+  - {<<: *service, name: 📲 Telegram}                      # Telegram 独立策略组
+  - {<<: *service, name: 🎥 NETFLIX}                       # Netflix 独立策略组
+  - {<<: *service, name: ✈️ Speedtest}                    # Speedtest 独立策略组
+  - {<<: *service, name: 💶 PayPal}                        # PayPal 独立策略组
+  - {name: 🍎 Apple, type: select, proxies: [直连, 🚀 默认代理]}  # Apple 默认直连，也可手动切换代理
+  - {name: 🎯 直连, type: select, proxies: [直连, 🚀 默认代理]}     # 可切换“直连”策略；不同于硬 DIRECT 出站
+  - {name: 🇭🇰 香港节点, type: select, include-all: true, exclude-type: direct, filter: "(?i)🇭🇰|港|香港|hk|hong ?kong"}  # 香港节点筛选
+  - {name: 🇯🇵 日本节点, type: select, include-all: true, exclude-type: direct, filter: "(?i)🇯🇵|日|日本|jp|japan"}  # 日本节点筛选
+  - {name: 🇺🇲 美国节点, type: select, include-all: true, exclude-type: direct, filter: "(?i)🇺🇸|🇺🇲|美|美国|us|usa|united ?states|america"}  # 美国节点筛选
+  - &fallback {name: 🔯 香港故转, type: fallback, include-all: true, url: https://www.gstatic.com/generate_204, interval: 600, filter: "(?i)🇭🇰|港|香港|hk|hong ?kong"}  # 香港故障转移模板
+  - {<<: *fallback, name: 🔯 日本故转, filter: "(?i)🇯🇵|日|日本|jp|japan"}  # 日本故障转移
+  - &urltest {name: ♻️ 自动选择, type: url-test, include-all: true, exclude-type: direct, url: https://www.gstatic.com/generate_204, interval: 600, tolerance: 20}  # 全节点自动测速模板
+  - {<<: *urltest, name: ♻️ 香港自动, filter: "(?i)🇭🇰|港|香港|hk|hong ?kong"}  # 香港自动选择
+  - {<<: *urltest, name: ♻️ 日本自动, filter: "(?i)🇯🇵|日|日本|jp|japan"}  # 日本自动选择
+  - {<<: *urltest, name: ♻️ 美国自动, filter: "(?i)🇺🇸|🇺🇲|美|美国|us|usa|united ?states|america"}  # 美国自动选择
+
+# ============================================================================== 
+# 分流规则
+# ============================================================================== 
+# Mihomo 按从上到下顺序匹配，命中后停止继续匹配，因此优先级非常重要。
+rules:                                                    # 实际流量分流规则；从上到下首个命中生效
+  - RULE-SET,private_domain,直连                           # 私有域名硬直连
+  - PROCESS-NAME-REGEX,.*spotify.*,🎯 直连                 # Spotify 进程走可切换直连
+  - PROCESS-NAME,onedrive.exe,🎯 直连                      # OneDrive 桌面进程优先直连
+  - RULE-SET,ai,🤖 ChatGPT                                # AI 类域名进入 ChatGPT 策略组
+  - RULE-SET,sciencedirect_domain,🎯 直连                  # ScienceDirect 直连
+  - RULE-SET,elsevier_domain,🎯 直连                       # Elsevier 直连
+  - RULE-SET,clarivate_domain,🎯 直连                      # Clarivate 直连
+  - RULE-SET,cnki_domain,🎯 直连                           # CNKI 直连
+  - RULE-SET,onedrive_domain,🐬 OneDrive                  # OneDrive 独立策略组
+  - RULE-SET,microsoft_domain,🪟 Microsoft                # Microsoft 独立策略组
+  - RULE-SET,adobeisdumb,REJECT                           # Adobe 屏蔽规则直接拒绝
+  - RULE-SET,github_domain,👨🏿‍💻 GitHub                    # GitHub 独立策略组
+  - RULE-SET,youtube_domain,📹 YouTube                    # YouTube 独立策略组
+  - RULE-SET,google_domain,🍀 Google                      # Google 独立策略组
+  - RULE-SET,apple_domain,🍎 Apple                        # Apple 策略组
+  - RULE-SET,tiktok_domain,🎵 TikTok                      # TikTok 独立策略组
+  - RULE-SET,speedtest_domain,✈️ Speedtest               # Speedtest 独立策略组
+  - RULE-SET,telegram_domain,📲 Telegram                  # Telegram 独立策略组
+  - RULE-SET,netflix_domain,🎥 NETFLIX                    # Netflix 独立策略组
+  - RULE-SET,paypal_domain,💶 PayPal                      # PayPal 独立策略组
+  - RULE-SET,proxylite,🚀 默认代理                         # 自定义 ProxyLite 走默认代理
+  - RULE-SET,gfw_domain,🚀 默认代理                        # GFW 域名走默认代理
+  - RULE-SET,cn_domain,🎯 直连                             # 中国域名走可切换直连
+  - RULE-SET,geolocation-!cn,🚀 默认代理                   # 其余非中国域名走默认代理
+  - RULE-SET,google_ip,🍀 Google,no-resolve               # Google IP 兜底
+  - RULE-SET,netflix_ip,🎥 NETFLIX,no-resolve             # Netflix IP 兜底
+  - RULE-SET,telegram_ip,📲 Telegram,no-resolve           # Telegram IP 兜底
+  - RULE-SET,cn_ip,🎯 直连                                 # 中国 IP 走可切换直连
+  - MATCH,🐟 漏网之鱼                                      # 最终兜底
+
+# ============================================================================== 
+# 规则集 Provider
+# ============================================================================== 
+# interval: 18000（5 小时）；规则集通过 ♻️ 自动选择 更新。
+rule-providers:
+  private_domain: &domain {type: http, behavior: domain, format: mrs, interval: 18000, proxy: ♻️ 自动选择, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}  # 私有域名，同时定义 &domain
+  ai: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs"}  # AI 非中国域名
+  youtube_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}  # YouTube
+  google_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}  # Google
+  github_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"}  # GitHub
+  telegram_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"}  # Telegram
+  netflix_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"}  # Netflix
+  paypal_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/paypal.mrs"}  # PayPal
+  onedrive_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/onedrive.mrs"}  # OneDrive
+  microsoft_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"}  # Microsoft
+  apple_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geosite/apple-cn.mrs"}  # Apple 中国区域名
+  speedtest_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ookla-speedtest.mrs"}  # Speedtest
+  tiktok_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs"}  # TikTok
+  gfw_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs"}  # GFW
+  geolocation-!cn: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"}  # 非中国地域域名
+  cn_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}  # 中国域名
+  sciencedirect_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/sciencedirect.mrs"}  # ScienceDirect
+  elsevier_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/elsevier.mrs"}  # Elsevier
+  cnki_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cnki.mrs"}  # CNKI
+  clarivate_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/clarivate.mrs"}  # Clarivate
+  proxylite: &classical_text {type: http, behavior: classical, format: text, interval: 18000, proxy: ♻️ 自动选择, url: "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_RULE_REPO/refs/heads/main/ProxyLite.list"}  # 自定义 ProxyLite；请替换为自己的规则源
+  adobeisdumb: {<<: *classical_text, format: yaml, url: "https://raw.githubusercontent.com/ignaciocastro/a-dove-is-dumb/refs/heads/main/clash.yaml"}  # Adobe 屏蔽规则
+  cn_ip: &ip {type: http, behavior: ipcidr, format: mrs, interval: 18000, proxy: ♻️ 自动选择, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}  # 中国 IP，同时定义 &ip
+  google_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"}  # Google IP
+  telegram_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"}  # Telegram IP
+  netflix_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"}  # Netflix IP
