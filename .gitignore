@@ -1,0 +1,16 @@
+# Local configs containing secrets
+config.yaml
+config.local.yaml
+*.private.yaml
+*.secret.yaml
+
+# Local data
+providers/
+.cache/
+
+# Environment and editor files
+.env
+.env.*
+.DS_Store
+.idea/
+.vscode/
