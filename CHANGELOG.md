@@ -1,5 +1,11 @@
 # Changelog
 
+## V4.1
+
+- 新增 `scripts/validate_config.py`，统一检查 YAML、策略组引用、Rule Provider 引用和公开模板脱敏状态。
+- 新增 GitHub Actions，在相关文件发生 push / pull request 变更时自动执行校验。
+- README 增加校验状态徽章、本地校验命令和 CI 说明。
+
 ## V4
 
 - 重新整理配置分区与注释。
