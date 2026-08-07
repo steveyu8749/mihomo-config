@@ -1,5 +1,7 @@
 # mihomo-config
 
+[![Validate Mihomo template](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml/badge.svg)](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml)
+
 一份面向 **手机 / 电脑本机 TUN 使用场景** 的 Mihomo 配置模板。重点不是堆叠参数，而是让每个配置项都能解释、能维护，并尽量降低局域网、DNS、Sniffer 与 TUN 之间的兼容性问题。
 
 ## 设计目标
@@ -15,6 +17,8 @@
 ## 文件
 
 - `config.example.yaml`：完整公开模板，已经移除真实订阅地址、Token、私有服务器地址、UUID 和个人自定义规则源。
+- `scripts/validate_config.py`：结构与脱敏检查脚本，可在本地或 CI 中运行。
+- `.github/workflows/validate.yml`：GitHub Actions 自动校验工作流。
 - `CHANGELOG.md`：记录配置设计上的重要调整。
 - `docs/design-notes.md`：解释 TUN、DNS、Sniffer 等关键设计取舍。
 - `.gitignore`：避免实际使用的私密配置被误提交。
@@ -37,6 +41,27 @@
 3. `config.yaml` 已被 `.gitignore` 忽略，**不要强制提交真实配置**。
 
 4. 导入 Mihomo / Clash Verge Rev 等兼容客户端后，再根据自己的网络环境测试 TUN、局域网发现和应用分流。
+
+## 自动校验
+
+修改 `config.example.yaml`、校验脚本或工作流后，GitHub Actions 会自动运行检查。当前检查包括：
+
+- YAML 是否能够正常解析。
+- `proxy-groups` 引用的成员是否存在。
+- Rules 指向的策略组 / 出站是否存在。
+- `RULE-SET` 与 DNS `fake-ip-filter` 引用的 Rule Provider 是否存在。
+- 公开模板中的机场订阅地址是否仍是占位形式。
+- 手工远程节点的服务器地址和 UUID 是否仍是占位形式。
+- 常见 query-string Token / API Key / Secret 与 UUID 是否疑似误提交。
+
+本地也可以运行同一套检查：
+
+```bash
+python -m pip install PyYAML
+python scripts/validate_config.py config.example.yaml
+```
+
+这套检查用于发现 YAML、引用和脱敏问题，**不等同于 Mihomo 内核的完整运行时验证**；真实配置仍应在实际客户端中测试。
 
 ## 关键取舍
 
