@@ -12,7 +12,7 @@ PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 BUILTIN_TARGETS = {"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"}
 FAKE_IP_RESULTS = {"real-ip", "fake-ip"}
 REQUIRED_REAL_IP_FILTERS = {
-    "GEOSITE,private,real-ip",
+    "RULE-SET,private_domain,real-ip",
     "RULE-SET,fakeip_compat,real-ip",
 }
 REQUIRED_FAKEIP_COMPAT = {
@@ -23,6 +23,29 @@ REQUIRED_FAKEIP_COMPAT = {
 RULE_PROVIDER_INTERVAL = 86400
 RULE_PROVIDER_PROXY = "🚀 默认代理"
 FORBIDDEN_GROUP_TYPES = {"fallback", "url-test"}
+SERVICE_GROUPS = {
+    "🐟 漏网之鱼",
+    "🤖 ChatGPT",
+    "📹 YouTube",
+    "🍀 Google",
+    "👨🏿‍💻 GitHub",
+    "🐬 OneDrive",
+    "🪟 Microsoft",
+    "🎵 TikTok",
+    "📲 Telegram",
+    "🎥 NETFLIX",
+    "✈️ Speedtest",
+    "💶 PayPal",
+}
+REQUIRED_PROVIDER_NAMES = {
+    "fakeip_compat",
+    "private_domain", "openai_domain", "youtube_domain", "google_domain",
+    "github_domain", "telegram_domain", "netflix_domain", "paypal_domain",
+    "onedrive_domain", "microsoft_domain", "apple_domain", "speedtest_domain",
+    "tiktok_domain", "gfw_domain", "geolocation-!cn", "cn_domain",
+    "sciencedirect_domain", "elsevier_domain", "clarivate_domain",
+    "proxylite", "adobeisdumb", "cn_ip", "google_ip", "telegram_ip", "netflix_ip",
+}
 
 
 def fail(errors: list[str], message: str) -> None:
@@ -98,9 +121,35 @@ def main() -> int:
         name = group.get("name", "<unnamed>")
         if group.get("type") in FORBIDDEN_GROUP_TYPES:
             fail(errors, f"proxy-group {name!r} uses removed automatic group type {group.get('type')!r}")
+        if name == "🌐 全部节点":
+            fail(errors, "shared '🌐 全部节点' group was removed in V4.6; groups should include nodes directly")
         for member in group.get("proxies") or []:
             if member not in valid_targets:
                 fail(errors, f"proxy-group {name!r} references missing member {member!r}")
+
+    groups_by_name = {g.get("name"): g for g in groups if isinstance(g, dict) and isinstance(g.get("name"), str)}
+    default_group = groups_by_name.get("🚀 默认代理")
+    if not isinstance(default_group, dict):
+        fail(errors, "missing 🚀 默认代理 group")
+    else:
+        if default_group.get("type") != "select":
+            fail(errors, "🚀 默认代理 must remain a select group")
+        if default_group.get("include-all") is not True:
+            fail(errors, "🚀 默认代理 must use include-all: true")
+        if default_group.get("exclude-type") != "direct":
+            fail(errors, "🚀 默认代理 must use exclude-type: direct")
+        if "直连" in (default_group.get("proxies") or []):
+            fail(errors, "🚀 默认代理 must not expose hard DIRECT")
+
+    for name in sorted(SERVICE_GROUPS):
+        group = groups_by_name.get(name)
+        if not isinstance(group, dict):
+            fail(errors, f"missing service group {name!r}")
+            continue
+        if group.get("type") != "select" or group.get("include-all") is not True:
+            fail(errors, f"service group {name!r} must be select with include-all: true")
+        if group.get("exclude-type") != "direct":
+            fail(errors, f"service group {name!r} must use exclude-type: direct")
 
     for index, rule in enumerate(rules, start=1):
         if not isinstance(rule, str):
@@ -117,6 +166,8 @@ def main() -> int:
             if len(parts) < 3:
                 fail(errors, f"rule #{index} {kind} is incomplete: {rule}")
                 continue
+            if kind in {"GEOSITE", "GEOIP"}:
+                fail(errors, f"rule #{index} uses {kind}; V4.6 public template intentionally uses MRS Rule Providers instead of GeoData")
             if kind == "RULE-SET" and parts[1] not in provider_names:
                 fail(errors, f"rule #{index} references missing rule-provider {parts[1]!r}")
             target = parts[2]
@@ -142,10 +193,10 @@ def main() -> int:
             fail(errors, f"fake-ip-filter #{index} has invalid result {parts[-1]!r}")
 
     order_pairs = [
-        ("GEOSITE,geolocation-!cn,", "GEOSITE,cn,", "geolocation-!cn must appear before cn"),
-        ("GEOSITE,onedrive,", "GEOSITE,microsoft,", "onedrive must appear before microsoft"),
-        ("GEOSITE,github,", "GEOSITE,microsoft,", "github must appear before microsoft"),
-        ("GEOSITE,youtube,", "GEOSITE,google,", "youtube must appear before google"),
+        ("RULE-SET,geolocation-!cn,", "RULE-SET,cn_domain,", "geolocation-!cn must appear before cn_domain"),
+        ("RULE-SET,onedrive_domain,", "RULE-SET,microsoft_domain,", "onedrive_domain must appear before microsoft_domain"),
+        ("RULE-SET,github_domain,", "RULE-SET,microsoft_domain,", "github_domain must appear before microsoft_domain"),
+        ("RULE-SET,youtube_domain,", "RULE-SET,google_domain,", "youtube_domain must appear before google_domain"),
     ]
     for first, second, message in order_pairs:
         first_index = rule_index(rules, first)
@@ -157,21 +208,21 @@ def main() -> int:
         fail(errors, "routing rules must end with MATCH")
 
     required_rules = {
-        "GEOSITE,private,直连",
-        "GEOSITE,openai,🤖 ChatGPT",
-        "GEOSITE,cn,🎯 直连",
-        "GEOIP,CN,🎯 直连",
+        "RULE-SET,private_domain,直连",
+        "RULE-SET,openai_domain,🤖 ChatGPT",
+        "RULE-SET,cn_domain,🎯 直连",
+        "RULE-SET,cn_ip,🎯 直连",
     }
     missing_rules = required_rules - {item for item in rules if isinstance(item, str)}
     for item in sorted(missing_rules):
         fail(errors, f"missing required routing rule: {item}")
 
     apns_rule = rule_index(rules, "DOMAIN-SUFFIX,push.apple.com,🍎 Apple")
-    apple_rule = rule_index(rules, "GEOSITE,apple-cn,🍎 Apple")
+    apple_rule = rule_index(rules, "RULE-SET,apple_domain,🍎 Apple")
     if apns_rule is None:
         fail(errors, "Apple APNs must have an explicit push.apple.com rule")
     elif apple_rule is not None and apns_rule > apple_rule:
-        fail(errors, "Apple APNs rule must appear before GEOSITE,apple-cn")
+        fail(errors, "Apple APNs rule must appear before apple_domain")
 
     if not fake_filter or fake_filter[-1] != "MATCH,fake-ip":
         fail(errors, "fake-ip-filter must end with MATCH,fake-ip")
@@ -191,11 +242,23 @@ def main() -> int:
     for protocol, config in (sniffer.get("sniff") or {}).items():
         if isinstance(config, dict) and config.get("override-destination") is True:
             fail(errors, f"sniffer {protocol} must not override destination")
+    if sniffer.get("skip-domain"):
+        fail(errors, "sniffer skip-domain must remain absent in V4.6; add exceptions only after a reproducible compatibility issue")
 
     if data.get("allow-lan") is True:
         fail(errors, "allow-lan must not be enabled in the local-only template")
 
+    for key in ("geodata-mode", "geodata-loader", "geo-auto-update", "geo-update-interval", "geox-url"):
+        if key in data:
+            fail(errors, f"{key} should not be configured in the MRS-only V4.6 template")
+
     if isinstance(providers, dict):
+        missing_providers = REQUIRED_PROVIDER_NAMES - provider_names
+        extra_providers = provider_names - REQUIRED_PROVIDER_NAMES
+        for name in sorted(missing_providers):
+            fail(errors, f"missing required rule-provider {name!r}")
+        for name in sorted(extra_providers):
+            fail(errors, f"unexpected rule-provider {name!r} in the stable V4.6 template")
         compat = providers.get("fakeip_compat")
         if not isinstance(compat, dict):
             fail(errors, "missing inline fakeip_compat rule-provider")
@@ -213,6 +276,8 @@ def main() -> int:
                 fail(errors, f"rule-provider {name!r} must use {RULE_PROVIDER_INTERVAL}s update interval")
             if provider.get("proxy") != RULE_PROVIDER_PROXY:
                 fail(errors, f"rule-provider {name!r} must download through {RULE_PROVIDER_PROXY!r}")
+            if provider.get("behavior") in {"domain", "ipcidr"} and provider.get("format") != "mrs":
+                fail(errors, f"rule-provider {name!r} must use MRS for domain/ipcidr data")
 
     if isinstance(proxy_providers, dict):
         for name, provider in proxy_providers.items():
