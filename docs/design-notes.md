@@ -26,7 +26,7 @@ DNS 的 Fake-IP / Real-IP 不承担“国内直连 / 国外代理”的职责；
 
 ## 核心版本前提
 
-V4.4 假定 Mihomo Core 支持 v1.19.10 之后的行为：Fake-IP TUN 场景下，DIRECT 的 `direct-nameserver` 重解析同时适用于 TCP 和 UDP。旧核心可能无法完整满足这套 DNS 设计。
+V4.5 假定 Mihomo Core 支持 v1.19.10 之后的行为：Fake-IP TUN 场景下，DIRECT 的 `direct-nameserver` 重解析同时适用于 TCP 和 UDP。旧核心可能无法完整满足这套 DNS 设计。
 
 ## TUN 与局域网
 
@@ -37,21 +37,26 @@ V4.4 假定 Mihomo Core 支持 v1.19.10 之后的行为：Fake-IP TUN 场景下�
 
 ## DNS / Fake-IP
 
-V4.4 使用最小 Real-IP 例外：
+V4.5 将最小 Real-IP 例外集中到 Rule Provider：
 
 ```yaml
 fake-ip-filter:
   - RULE-SET,private_domain,real-ip
-  - DOMAIN,dns.msftncsi.com,real-ip
-  - DOMAIN-SUFFIX,push.apple.com,real-ip
+  - RULE-SET,fakeip_compat,real-ip
   - MATCH,fake-ip
 ```
 
 `private_domain` 的实际上游集合已经包含 `.local` 和 `home.arpa`，所以不再重复声明。
 
-Windows NCSI 中，`dns.msftncsi.com` 的 DNS 探测会验证特定 A 记录，因此只对这个精确主机保留 Real-IP；`www.msftconnecttest.com` 的 Web 探测只要求正常 DNS 和指定 HTTP 内容，不需要整域 Real-IP，也不需要额外硬 DIRECT。
+`fakeip_compat` 使用 `type: inline` + `behavior: domain`，当前只包含：
 
-APNs 保留 Real-IP，是因为 Apple VPN API 允许 APNs 在特定全隧道配置下被排除。如果系统流量绕过 Mihomo，就不能依赖 `198.18.0.0/16` 的 Fake-IP 映射。
+```text
+dns.msftncsi.com
++.push.apple.com
++.market.xiaomi.com
+```
+
+Windows NCSI 中，`dns.msftncsi.com` 的 DNS 探测会验证特定 A 记录；APNs 保留 Real-IP 是为了兼容可能绕过 VPN 的系统流量。`+.market.xiaomi.com` 作为小米应用商店兼容项加入，但它只影响 Fake-IP/Real-IP，不承担局域网小米互联修复。
 
 普通国内域名、国外域名、FCM、NTP 等统一使用 Fake-IP；命中 DIRECT 后再由 `direct-nameserver: system` 获取真实目标地址。
 
@@ -108,6 +113,14 @@ private / process
 → IP fallback
 → MATCH
 ```
+
+## Rule Provider / Rule Set
+
+远程 Rule Provider 统一按 24 小时更新；机场 Proxy Provider 的刷新周期不变。GitHub Raw 规则继续通过 `♻️ 自动选择` 下载，不引入第三方 GitHub 反代。
+
+没有整包引入参考配置的 `fakeipfilter-cn` / `fakeipfilter-!cn`，因为其中包含 NTP、STUN、音乐、游戏、运营商登录、UU 加速器等大量当前没有必要强制 Real-IP 的域名。需要兼容的项目只进入本地 `fakeip_compat`。
+
+独立 `cnki_domain` 被删除：`cn` 上游已经包含 `geolocation-cn`，其学术分类继续包含 CNKI；两条规则最终又都是 `🎯 直连`，单独 Provider 没有行为收益。ScienceDirect、Elsevier、Clarivate 则继续保留，因为它们是海外学术服务，需要在 `geolocation-!cn` 之前显式直连。
 
 ## 维护原则
 
