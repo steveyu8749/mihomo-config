@@ -1,5 +1,15 @@
 # Changelog
 
+## V4.5
+
+- 本次只调整 Rule Provider / Rule Set；TUN、Sniffer、端口、策略组、DNS 上游与 Keep Alive 均不变。
+- 远程 Rule Provider 更新周期从 18000 秒统一调整为 86400 秒（24 小时）；机场 Proxy Provider 仍保持原来的 18000 秒。
+- 新增本地 `inline` 域名规则集 `fakeip_compat`，集中管理少量 Real-IP 兼容项，避免引入整套第三方 Fake-IP 过滤列表。
+- `fakeip_compat` 当前包含 `dns.msftncsi.com`、`+.push.apple.com`、`+.market.xiaomi.com`；其中小米项只用于应用商店类 Fake-IP 兼容，不作为局域网“小米互联”修复。
+- `fake-ip-filter` 精简为 `private_domain -> real-ip`、`fakeip_compat -> real-ip`、`MATCH -> fake-ip`。
+- 删除独立 `cnki_domain` Rule Provider 与对应路由规则；`cn_domain` 已通过 `geolocation-cn -> category-scholar-cn` 覆盖 CNKI，原配置属于重复分流。
+- 不引入参考配置中的整套 `fakeipfilter-cn` / `fakeipfilter-!cn`、`private_ip`、`apple_ip`、`winupdate_domain`、NTP/STUN/UU 等额外规则集。
+
 ## V4.4
 
 - 核实上游 `microsoft` geosite 包含 `github`，将 `github_domain` 调整到 `microsoft_domain` 前，修复 GitHub 独立策略可能被 Microsoft 提前命中的问题。
