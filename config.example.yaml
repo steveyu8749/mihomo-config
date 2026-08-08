@@ -155,8 +155,6 @@ rules:                                                    # 实际流量分流�
   - PROCESS-NAME,onedrive.exe,🎯 直连
   
   - RULE-SET,private_domain,直连                           # 私有域名硬直连
-  - PROCESS-NAME-REGEX,.*spotify.*,🎯 直连                 # Spotify 进程走可切换直连
-  - PROCESS-NAME,onedrive.exe,🎯 直连                      # OneDrive 桌面进程优先直连
   - RULE-SET,openai_domain,🤖 ChatGPT                     # OpenAI / ChatGPT 使用专用规则，避免误收其他 AI 服务
   - RULE-SET,sciencedirect_domain,🎯 直连                  # ScienceDirect 直连
   - RULE-SET,elsevier_domain,🎯 直连                       # Elsevier 直连
