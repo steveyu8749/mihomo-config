@@ -2,17 +2,19 @@
 
 ## V4.6
 
-- Sniffer 改为纯识别模式：删除 HTTP 单独的 `override-destination: true`，HTTP / TLS / QUIC 均不覆盖实际目标。
-- 删除所有地区筛选组、fallback 与 url-test 自动策略组；保留 `🌐 全部节点` 手工选择和各业务策略组。
-- 机场 Proxy Provider 健康检查保持启用。
-- 公共域名分类由大量 MetaCubeX MRS Rule Provider 迁移为 `GEOSITE`，包括 private、OpenAI、GitHub、Microsoft、Google、Apple CN、GFW、CN 等。
-- `fake-ip-filter` 改为 `GEOSITE,private -> real-ip`、`RULE-SET,fakeip_compat -> real-ip`、`MATCH -> fake-ip`。
-- `cn_ip` MRS 改为标准 `GEOIP,CN`；不启用 `geodata-mode: true`，继续使用默认 MMDB。
-- Google / Telegram / Netflix 服务 IP 继续使用 MRS，不做全 GeoIP DAT 化。
-- Rule Provider 从 26 个收敛为 6 个：`fakeip_compat`、`proxylite`、`adobeisdumb`、`google_ip`、`telegram_ip`、`netflix_ip`。
-- 远程 Rule Provider 继续使用 86400 秒更新周期，下载策略从已删除的 `♻️ 自动选择` 改为 `🚀 默认代理`。
-- 不启用 `allow-lan`、`respect-rules`、`geo-auto-update` 或自定义 `geox-url`。
-- TUN 继续作为跨客户端基线保留；文档明确 GUI 客户端可能合并/覆写 TUN/DNS，应以最终运行配置为准。
+- 保留 V4.5 的 MRS 规则数据层，不再依赖 `GEOSITE` / `GEOIP` 或客户端 GeoData；域名与 IP 公共分类继续通过独立 MRS Rule Provider 加载。
+- Sniffer 改为完全“只识别、不改目标”：删除 HTTP 单独的 `override-destination: true`，HTTP / TLS / QUIC 均不覆盖实际目标。
+- 删除全部 Sniffer `skip-domain`；以后只在问题可稳定复现且确认由嗅探导致时按最小范围加回。
+- 删除所有地区筛选、fallback、url-test 自动策略组，以及共享 `🌐 全部节点` 中间组。
+- `🚀 默认代理` 改为 `select + include-all + exclude-type: direct`，直接包含所有代理节点且不提供硬 DIRECT。
+- 每个业务策略组同样直接 `include-all`，既可继承 `🚀 默认代理`，也可为单一服务独立手工选择具体节点。
+- 机场 Proxy Provider 健康检查保持启用；订阅刷新仍为 18000 秒，健康检查仍为 600 秒。
+- `fake-ip-filter` 保持 `private_domain -> real-ip`、`fakeip_compat -> real-ip`、`MATCH -> fake-ip`，普通国内域名继续默认 Fake-IP。
+- `private_domain`、OpenAI、Google、GitHub、Microsoft、Apple CN、GFW、CN 等公共域名恢复为 MRS Provider；`cn_ip`、Google、Telegram、Netflix IP 同样使用 MRS。
+- 远程 Rule Provider 继续使用 86400 秒更新周期，下载统一通过 `🚀 默认代理`。
+- 不启用 `allow-lan`、`respect-rules`、`geodata-mode`、`geo-auto-update` 或自定义 `geox-url`。
+- TUN 继续作为跨客户端基线保留；Clash Verge Rev 等 GUI 客户端仍应以最终运行配置为准。
+- 公开模板恢复完整解释性注释，重点说明各参数存在的理由和 V4.6 的取舍。
 
 ## V4.5
 
