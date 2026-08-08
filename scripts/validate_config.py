@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import argparse
 import re
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import yaml
@@ -16,8 +19,51 @@ def fail(errors: list[str], message: str) -> None:
     errors.append(message)
 
 
+def is_placeholder_url(url: str) -> bool:
+    upper = url.upper()
+    return "YOUR_" in upper or "EXAMPLE.COM" in upper
+
+
+def check_url(url: str, timeout: float = 15.0) -> tuple[bool, str]:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "mihomo-config-validator/1.0",
+            "Range": "bytes=0-0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            code = getattr(response, "status", 200)
+            if 200 <= code < 400:
+                return True, str(code)
+            return False, f"HTTP {code}"
+    except urllib.error.HTTPError as exc:
+        return False, f"HTTP {exc.code}"
+    except urllib.error.URLError as exc:
+        return False, str(exc.reason)
+    except TimeoutError:
+        return False, "timeout"
+
+
+def rule_index(rules: list[str], prefix: str) -> int | None:
+    for index, rule in enumerate(rules):
+        if isinstance(rule, str) and rule.startswith(prefix):
+            return index
+    return None
+
+
 def main() -> int:
-    path = Path(sys.argv[1] if len(sys.argv) > 1 else "config.example.yaml")
+    parser = argparse.ArgumentParser(description="Validate the public Mihomo template")
+    parser.add_argument("config", nargs="?", default="config.example.yaml")
+    parser.add_argument(
+        "--skip-network",
+        action="store_true",
+        help="skip remote Rule Provider URL reachability checks",
+    )
+    args = parser.parse_args()
+
+    path = Path(args.config)
     errors: list[str] = []
 
     if not path.is_file():
@@ -104,6 +150,23 @@ def main() -> int:
             if parts[2] not in FAKE_IP_RESULTS:
                 fail(errors, f"fake-ip-filter #{index} has invalid result {parts[2]!r}")
 
+    # Template-specific ordering invariants: explicit non-CN routing should win before broad CN matching.
+    geo_rule = rule_index(rules, "RULE-SET,geolocation-!cn,")
+    cn_rule = rule_index(rules, "RULE-SET,cn_domain,")
+    if geo_rule is not None and cn_rule is not None and geo_rule > cn_rule:
+        fail(errors, "geolocation-!cn must appear before cn_domain in routing rules")
+
+    geo_fake = rule_index(fake_filter, "RULE-SET,geolocation-!cn,fake-ip")
+    cn_real = rule_index(fake_filter, "RULE-SET,cn_domain,real-ip")
+    if geo_fake is not None and cn_real is not None and geo_fake > cn_real:
+        fail(errors, "geolocation-!cn fake-ip decision must appear before cn_domain real-ip")
+
+    if rule_index(rules, "RULE-SET,openai_domain,🤖 ChatGPT") is None:
+        fail(errors, "ChatGPT group must use the dedicated openai_domain rule-provider")
+
+    if rule_index(rules, "DOMAIN-SUFFIX,push.apple.com,🍎 Apple") is None:
+        fail(errors, "Apple APNs must have an explicit push.apple.com rule")
+
     # Public template safety: subscription providers must visibly use placeholders.
     proxy_providers = data.get("proxy-providers") or {}
     if isinstance(proxy_providers, dict):
@@ -111,7 +174,7 @@ def main() -> int:
             if not isinstance(provider, dict):
                 continue
             url = str(provider.get("url", ""))
-            if url and "example.com" not in url and "YOUR_" not in url:
+            if url and not is_placeholder_url(url):
                 fail(errors, f"proxy-provider {name!r} URL looks live instead of sanitized")
 
     # Public template safety: manually defined remote nodes must use placeholder endpoints/UUIDs.
@@ -139,6 +202,23 @@ def main() -> int:
         if value.lower() != PLACEHOLDER_UUID:
             fail(errors, "found a UUID that does not match the public placeholder UUID")
 
+    # Public Rule Provider URLs should still exist. Placeholder URLs are intentionally skipped.
+    checked_urls = 0
+    if not args.skip_network and isinstance(providers, dict):
+        for name, provider in providers.items():
+            if not isinstance(provider, dict):
+                continue
+            url = str(provider.get("url", ""))
+            if not url or is_placeholder_url(url):
+                continue
+            if not url.startswith(("https://", "http://")):
+                fail(errors, f"rule-provider {name!r} has a non-HTTP URL: {url}")
+                continue
+            ok, detail = check_url(url)
+            checked_urls += 1
+            if not ok:
+                fail(errors, f"rule-provider {name!r} URL is unreachable: {detail} ({url})")
+
     if errors:
         print("Validation failed:")
         for item in errors:
@@ -152,6 +232,10 @@ def main() -> int:
     print(f"  rules:           {len(rules)}")
     print(f"  rule-providers:  {len(providers)}")
     print("  secret scan:     passed")
+    if args.skip_network:
+        print("  provider URLs:   skipped")
+    else:
+        print(f"  provider URLs:   {checked_urls} checked")
     return 0
 
 
