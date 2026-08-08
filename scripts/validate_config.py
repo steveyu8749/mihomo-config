@@ -2,22 +2,25 @@ from __future__ import annotations
 
 import argparse
 import re
-import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 import yaml
 
-
 PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 BUILTIN_TARGETS = {"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"}
 FAKE_IP_RESULTS = {"real-ip", "fake-ip"}
 REQUIRED_REAL_IP_FILTERS = {
     "RULE-SET,private_domain,real-ip",
-    "DOMAIN,dns.msftncsi.com,real-ip",
-    "DOMAIN-SUFFIX,push.apple.com,real-ip",
+    "RULE-SET,fakeip_compat,real-ip",
 }
+REQUIRED_FAKEIP_COMPAT = {
+    "dns.msftncsi.com",
+    "+.push.apple.com",
+    "+.market.xiaomi.com",
+}
+RULE_PROVIDER_INTERVAL = 86400
 
 
 def fail(errors: list[str], message: str) -> None:
@@ -161,6 +164,23 @@ def main() -> int:
 
     if "RULE-SET,cn_domain,real-ip" in fake_filter:
         fail(errors, "cn_domain must not be globally forced to Real-IP")
+
+    if isinstance(providers, dict):
+        compat = providers.get("fakeip_compat")
+        if not isinstance(compat, dict):
+            fail(errors, "missing inline fakeip_compat rule-provider")
+        else:
+            if compat.get("type") != "inline" or compat.get("behavior") != "domain":
+                fail(errors, "fakeip_compat must be type:inline with behavior:domain")
+            payload = {item for item in (compat.get("payload") or []) if isinstance(item, str)}
+            for item in sorted(REQUIRED_FAKEIP_COMPAT - payload):
+                fail(errors, f"fakeip_compat missing required domain pattern: {item}")
+
+        for name, provider in providers.items():
+            if not isinstance(provider, dict):
+                continue
+            if provider.get("type") == "http" and provider.get("interval") != RULE_PROVIDER_INTERVAL:
+                fail(errors, f"rule-provider {name!r} must use {RULE_PROVIDER_INTERVAL}s update interval")
 
     proxy_providers = data.get("proxy-providers") or {}
     if isinstance(proxy_providers, dict):
