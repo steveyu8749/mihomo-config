@@ -12,7 +12,7 @@ PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 BUILTIN_TARGETS = {"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"}
 FAKE_IP_RESULTS = {"real-ip", "fake-ip"}
 REQUIRED_REAL_IP_FILTERS = {
-    "RULE-SET,private_domain,real-ip",
+    "GEOSITE,private,real-ip",
     "RULE-SET,fakeip_compat,real-ip",
 }
 REQUIRED_FAKEIP_COMPAT = {
@@ -21,6 +21,8 @@ REQUIRED_FAKEIP_COMPAT = {
     "+.market.xiaomi.com",
 }
 RULE_PROVIDER_INTERVAL = 86400
+RULE_PROVIDER_PROXY = "🚀 默认代理"
+FORBIDDEN_GROUP_TYPES = {"fallback", "url-test"}
 
 
 def fail(errors: list[str], message: str) -> None:
@@ -82,6 +84,7 @@ def main() -> int:
     groups = data.get("proxy-groups") or []
     providers = data.get("rule-providers") or {}
     rules = data.get("rules") or []
+    proxy_providers = data.get("proxy-providers") or {}
 
     proxy_names = {item.get("name") for item in proxies if isinstance(item, dict) and isinstance(item.get("name"), str)}
     group_names = {item.get("name") for item in groups if isinstance(item, dict) and isinstance(item.get("name"), str)}
@@ -93,6 +96,8 @@ def main() -> int:
             fail(errors, f"proxy-group entry is not a mapping: {group!r}")
             continue
         name = group.get("name", "<unnamed>")
+        if group.get("type") in FORBIDDEN_GROUP_TYPES:
+            fail(errors, f"proxy-group {name!r} uses removed automatic group type {group.get('type')!r}")
         for member in group.get("proxies") or []:
             if member not in valid_targets:
                 fail(errors, f"proxy-group {name!r} references missing member {member!r}")
@@ -118,9 +123,11 @@ def main() -> int:
         if target not in valid_targets:
             fail(errors, f"rule #{index} references missing target {target!r}")
 
-    fake_filter = ((data.get("dns") or {}).get("fake-ip-filter") or [])
+    dns = data.get("dns") or {}
+    fake_filter = dns.get("fake-ip-filter") or []
     for index, item in enumerate(fake_filter, start=1):
         if not isinstance(item, str):
+            fail(errors, f"fake-ip-filter #{index} is not a string: {item!r}")
             continue
         parts = [part.strip() for part in item.split(",")]
         if parts and parts[0] == "RULE-SET":
@@ -131,29 +138,40 @@ def main() -> int:
                 fail(errors, f"fake-ip-filter #{index} references missing rule-provider {parts[1]!r}")
             if parts[2] not in FAKE_IP_RESULTS:
                 fail(errors, f"fake-ip-filter #{index} has invalid result {parts[2]!r}")
+        elif len(parts) >= 3 and parts[-1] not in FAKE_IP_RESULTS:
+            fail(errors, f"fake-ip-filter #{index} has invalid result {parts[-1]!r}")
 
-    geo_rule = rule_index(rules, "RULE-SET,geolocation-!cn,")
-    cn_rule = rule_index(rules, "RULE-SET,cn_domain,")
-    if geo_rule is not None and cn_rule is not None and geo_rule > cn_rule:
-        fail(errors, "geolocation-!cn must appear before cn_domain in routing rules")
-
-    github_rule = rule_index(rules, "RULE-SET,github_domain,")
-    microsoft_rule = rule_index(rules, "RULE-SET,microsoft_domain,")
-    if github_rule is not None and microsoft_rule is not None and github_rule > microsoft_rule:
-        fail(errors, "github_domain must appear before microsoft_domain because microsoft includes github")
+    order_pairs = [
+        ("GEOSITE,geolocation-!cn,", "GEOSITE,cn,", "geolocation-!cn must appear before cn"),
+        ("GEOSITE,onedrive,", "GEOSITE,microsoft,", "onedrive must appear before microsoft"),
+        ("GEOSITE,github,", "GEOSITE,microsoft,", "github must appear before microsoft"),
+        ("GEOSITE,youtube,", "GEOSITE,google,", "youtube must appear before google"),
+    ]
+    for first, second, message in order_pairs:
+        first_index = rule_index(rules, first)
+        second_index = rule_index(rules, second)
+        if first_index is not None and second_index is not None and first_index > second_index:
+            fail(errors, message)
 
     if not rules or not isinstance(rules[-1], str) or not rules[-1].startswith("MATCH,"):
         fail(errors, "routing rules must end with MATCH")
 
-    if rule_index(rules, "RULE-SET,openai_domain,🤖 ChatGPT") is None:
-        fail(errors, "ChatGPT group must use the dedicated openai_domain rule-provider")
+    required_rules = {
+        "GEOSITE,private,直连",
+        "GEOSITE,openai,🤖 ChatGPT",
+        "GEOSITE,cn,🎯 直连",
+        "GEOIP,CN,🎯 直连",
+    }
+    missing_rules = required_rules - {item for item in rules if isinstance(item, str)}
+    for item in sorted(missing_rules):
+        fail(errors, f"missing required routing rule: {item}")
 
     apns_rule = rule_index(rules, "DOMAIN-SUFFIX,push.apple.com,🍎 Apple")
-    apple_rule = rule_index(rules, "RULE-SET,apple_domain,🍎 Apple")
+    apple_rule = rule_index(rules, "GEOSITE,apple-cn,🍎 Apple")
     if apns_rule is None:
         fail(errors, "Apple APNs must have an explicit push.apple.com rule")
     elif apple_rule is not None and apns_rule > apple_rule:
-        fail(errors, "Apple APNs rule must appear before the broader apple_domain rule")
+        fail(errors, "Apple APNs rule must appear before GEOSITE,apple-cn")
 
     if not fake_filter or fake_filter[-1] != "MATCH,fake-ip":
         fail(errors, "fake-ip-filter must end with MATCH,fake-ip")
@@ -162,8 +180,20 @@ def main() -> int:
     for item in sorted(missing_real_ip):
         fail(errors, f"missing required Real-IP compatibility rule: {item}")
 
-    if "RULE-SET,cn_domain,real-ip" in fake_filter:
-        fail(errors, "cn_domain must not be globally forced to Real-IP")
+    if dns.get("respect-rules") is True:
+        fail(errors, "respect-rules must remain disabled for the current direct domestic DoH design")
+
+    sniffer = data.get("sniffer") or {}
+    if sniffer.get("enable") is not True:
+        fail(errors, "sniffer must remain enabled as a domain-identification fallback")
+    if sniffer.get("override-destination") is not False:
+        fail(errors, "sniffer override-destination must be false")
+    for protocol, config in (sniffer.get("sniff") or {}).items():
+        if isinstance(config, dict) and config.get("override-destination") is True:
+            fail(errors, f"sniffer {protocol} must not override destination")
+
+    if data.get("allow-lan") is True:
+        fail(errors, "allow-lan must not be enabled in the local-only template")
 
     if isinstance(providers, dict):
         compat = providers.get("fakeip_compat")
@@ -177,12 +207,13 @@ def main() -> int:
                 fail(errors, f"fakeip_compat missing required domain pattern: {item}")
 
         for name, provider in providers.items():
-            if not isinstance(provider, dict):
+            if not isinstance(provider, dict) or provider.get("type") != "http":
                 continue
-            if provider.get("type") == "http" and provider.get("interval") != RULE_PROVIDER_INTERVAL:
+            if provider.get("interval") != RULE_PROVIDER_INTERVAL:
                 fail(errors, f"rule-provider {name!r} must use {RULE_PROVIDER_INTERVAL}s update interval")
+            if provider.get("proxy") != RULE_PROVIDER_PROXY:
+                fail(errors, f"rule-provider {name!r} must download through {RULE_PROVIDER_PROXY!r}")
 
-    proxy_providers = data.get("proxy-providers") or {}
     if isinstance(proxy_providers, dict):
         for name, provider in proxy_providers.items():
             if not isinstance(provider, dict):
@@ -190,6 +221,9 @@ def main() -> int:
             url = str(provider.get("url", ""))
             if url and not is_placeholder_url(url):
                 fail(errors, f"proxy-provider {name!r} URL looks live instead of sanitized")
+            health = provider.get("health-check") or {}
+            if not isinstance(health, dict) or health.get("enable") is not True:
+                fail(errors, f"proxy-provider {name!r} must keep health-check enabled")
 
     for proxy in proxies:
         if not isinstance(proxy, dict) or proxy.get("type") == "direct":
