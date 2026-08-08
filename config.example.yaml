@@ -1,17 +1,17 @@
-# ==============================================================================
+# ================================================================================
 # 注意：
 #   - 本模板不启用 respect-rules；当前 AliDNS / DNSPod DoH 本来就应直接访问。
 #   - Clash Verge Rev 等 GUI 客户端可能对 TUN / DNS 做全局合并或覆写，应以最终运行配置为准。
-# ==============================================================================
+# ================================================================================
 
-# ==============================================================================
+# ================================================================================
 # 代理提供器（机场订阅）
-# ==============================================================================
+# ================================================================================
 # 统一管理机场订阅；第一个 Provider 同时作为 YAML Anchor 公共模板。
 proxy-providers:                                          # 机场订阅 Provider 总表
   Provider_A: &airport                                    # 订阅 A；同时定义 Provider 公共锚点 &airport
     type: http                                            # 通过 HTTP(S) URL 拉取订阅内容
-    url: "订阅url"                                        # 订阅地址占位符
+    url: "https://example.com/provider-a.yaml"            # 安全占位符；请替换为真实订阅地址
     interval: 18000                                       # 每 5 小时刷新一次订阅
     proxy: 直连                                           # 订阅文件本身通过硬 DIRECT 下载
     health-check:                                         # Provider 节点可用性检查
@@ -21,22 +21,22 @@ proxy-providers:                                          # 机场订阅 Provide
 
   Provider_B:                                             # 订阅 B Provider
     <<: *airport                                          # 继承公共 Provider 设置
-    url: "订阅url"                                         # 订阅地址占位符
+    url: "https://example.com/provider-b.yaml"            # 安全占位符；请替换为真实订阅地址
 
   Provider_C:                                             # 订阅 C Provider
     <<: *airport                                          # 继承公共 Provider 设置
-    url: "订阅url"                                        # 订阅地址占位符
+    url: "https://example.com/provider-c.yaml"            # 安全占位符；请替换为真实订阅地址
 
-# ==============================================================================
+# ================================================================================
 # 手工节点
-# ==============================================================================
-# 保留一个硬 DIRECT 出站和一个 VLESS Vision 示例节点。
+# ================================================================================
+# 保留一个硬 DIRECT 出站，供规则和策略组显式引用。
 proxies:                                                  # 手工定义的本地出站节点
   - {name: 直连, type: direct}                             # 硬 DIRECT 出站，供规则和策略组引用
 
-# ==============================================================================
+# ================================================================================
 # 全局基础设置
-# ==============================================================================
+# ================================================================================
 # 定义本地代理入口、核心网络行为、状态持久化和仅本机可访问的控制 API。
 mixed-port: 7893                                          # HTTP(S) + SOCKS5 混合代理入口
 redir-port: 7892                                          # 备用 REDIRECT 透明代理入口，仅 TCP
@@ -55,9 +55,9 @@ profile:                                                  # 需要跨重启保�
 
 external-controller: 127.0.0.1:9090                      # 仅本机开放 Mihomo API，不暴露给局域网
 
-# ==============================================================================
+# ================================================================================
 # 域名嗅探（Sniffer）
-# ==============================================================================
+# ================================================================================
 # 作用：当 Fake-IP / DNSMapping 没有提供域名时，从 HTTP Host、TLS SNI、QUIC 握手中补充恢复域名。
 # 原则：只识别、不改目标。V4.6 删除全部 skip-domain；如未来出现可稳定复现的问题，再按最小范围加回例外。
 sniffer:                                                  # 域名嗅探配置
@@ -72,9 +72,9 @@ sniffer:                                                  # 域名嗅探配置
     QUIC:                                                 # QUIC / HTTP3 初始握手域名嗅探
       ports: [443, 8443]                                  # 常见 QUIC / HTTP3 端口
 
-# ==============================================================================
+# ================================================================================
 # TUN 入站
-# ==============================================================================
+# ================================================================================
 # 手机端实现系统级代理通常依赖 VPN/TUN；电脑端同样可用。Clash Verge Rev 等 GUI 客户端可能在最终配置中覆写部分 TUN 字段。
 tun:                                                      # TUN 系统级接管配置
   enable: true                                            # 启用当前模块
@@ -93,9 +93,9 @@ tun:                                                      # TUN 系统级接管�
     - 255.255.255.255/32                                  # Limited Broadcast
     # - 100.64.0.0/10                                     # 可选：RFC6598 / CGNAT；需要其绕过 TUN 时取消注释
 
-# ==============================================================================
+# ================================================================================
 # DNS
-# ==============================================================================
+# ================================================================================
 # 采用 Fake-IP 作为默认 DNS 语义；Real-IP 仅保留给明确兼容场景。当前国内 DoH 直连，因此不启用 respect-rules。
 dns:                                                      # Mihomo 内置 DNS 配置
   enable: true                                            # 启用当前模块
@@ -116,9 +116,9 @@ dns:                                                      # Mihomo 内置 DNS �
   direct-nameserver:                                      # 最终确定 DIRECT 后用于真实 IP 解析的 DNS
     - system                                              # 跟随当前系统/路由器/运营商 DNS 解析 DIRECT 目标
 
-# ==============================================================================
+# ================================================================================
 # 策略组
-# ==============================================================================
+# ================================================================================
 # V4.6 不再维护地区筛选、fallback、url-test 或共享“全部节点”组。
 # “默认代理”和每个业务组都直接 include-all：既能继承统一默认选择，也能按业务单独手工指定具体节点。
 proxy-groups:                                             # 所有可在客户端手动选择的策略组
@@ -130,7 +130,9 @@ proxy-groups:                                             # 所有可在客户�
   - &service                                              # 业务策略组公共模板；每个业务组拥有独立的节点选择状态
     name: 🐟 漏网之鱼                                     # MATCH 最终兜底策略组，同时作为 YAML Anchor
     type: select                                          # 完全手工选择
-    proxies: [🚀 默认代理, 直连]                           # 优先继承默认代理，也允许切换到可控直连组
+    proxies: [🚀 默认代理, 直连]                           # 先提供统一默认代理和硬直连
+    include-all: true                                     # 同时直接纳入所有订阅/手工代理节点，便于业务组单独指定
+    exclude-type: direct                                  # include-all 时排除 direct；显式的“直连”仍保留
 
   - {<<: *service, name: 🤖 ChatGPT}                      # OpenAI / ChatGPT 独立策略组
   - {<<: *service, name: 📹 YouTube}                      # YouTube 独立策略组
@@ -146,21 +148,21 @@ proxy-groups:                                             # 所有可在客户�
 
   - {name: 🍎 Apple, type: select, proxies: [直连, 🚀 默认代理]}  # APNs / Apple CN 默认硬直连，异常时可切默认代理
 
-# ==============================================================================
+# ================================================================================
 # 分流规则
-# ==============================================================================
+# ================================================================================
 # Mihomo 按从上到下顺序匹配，命中后停止继续匹配。V4.6 继续使用 MRS Rule Provider，不依赖 GEOSITE/GEOIP。
 rules:                                                    # 实际流量分流规则；从上到下首个命中生效
   - PROCESS-NAME-REGEX,.*spotify.*,直连
   - PROCESS-NAME,onedrive.exe,直连
   - PROCESS-NAME-REGEX,.*xboxone.*,🪟 Microsoft
   - PROCESS-NAME,com.microsoft.bing,🪟 Microsoft
-  
+
   - RULE-SET,private_domain,直连                           # 私有域名硬直连
-  - RULE-SET,openai_domain,🤖 ChatGPT                     # OpenAI / ChatGPT 使用专用规则，避免误收其他 AI 服务
-  - RULE-SET,sciencedirect_domain,直连                  # ScienceDirect 直连
-  - RULE-SET,elsevier_domain,直连                       # Elsevier 直连
-  - RULE-SET,clarivate_domain,直连                      # Clarivate 直连
+  - RULE-SET,openai_domain,🤖 ChatGPT                     # 仅 OpenAI / ChatGPT 域名进入专用策略组
+  - RULE-SET,sciencedirect_domain,直连                     # ScienceDirect 硬直连
+  - RULE-SET,elsevier_domain,直连                          # Elsevier 硬直连
+  - RULE-SET,clarivate_domain,直连                         # Clarivate 硬直连
   - RULE-SET,proxylite,🚀 默认代理                         # 自定义 ProxyLite 走默认代理
   - RULE-SET,bing_domain,🪟 Microsoft
   - RULE-SET,msn_domain,🪟 Microsoft
@@ -180,27 +182,26 @@ rules:                                                    # 实际流量分流�
   - RULE-SET,paypal_domain,💶 PayPal                      # PayPal 独立策略组
   - RULE-SET,gfw_domain,🚀 默认代理                        # GFW 域名走默认代理
   - RULE-SET,geolocation-!cn,🚀 默认代理                   # 非中国域名优先代理，避免与宽泛 CN 集合交叉时被直连抢先
-  - RULE-SET,cn_domain,直连                             # 其余中国域名走可切换直连
-  
-  - RULE-SET,apple_ip,🍎 Apple 
+  - RULE-SET,cn_domain,直连                               # 其余中国域名硬直连
+
+  - RULE-SET,apple_ip,🍎 Apple
   - RULE-SET,google_ip,🍀 Google,no-resolve               # Google IP 兜底
   - RULE-SET,netflix_ip,🎥 NETFLIX,no-resolve             # Netflix IP 兜底
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve           # Telegram IP 兜底
-  - RULE-SET,cn_ip,直连                                 # 中国 IP 走可切换直连
+  - RULE-SET,cn_ip,直连                                   # 中国 IP 硬直连
   - MATCH,🐟 漏网之鱼                                      # 最终兜底
 
-# ==============================================================================
+# ================================================================================
 # 规则集 Provider
-# ==============================================================================
+# ================================================================================
 # 远程 Rule Provider 每 24 小时更新；公共域名与服务 IP 均使用 MRS，避免依赖客户端 GeoData。
 # GitHub Raw 规则统一通过“🚀 默认代理”拉取；该组只包含代理节点，不会退化为 DIRECT。
-# type：可选http/file/inline  behavior：可选domain/ipcidr/classical format：可选yaml/text/mrs
+# type：可选 http/file/inline；behavior：可选 domain/ipcidr/classical；format：可选 yaml/text/mrs。
 rule-anchor:
-  ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs}
-  domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}
-  domaintxt: &domain {type: http, interval: 86400, behavior: domain, format: text}
-  class: &class {type: http, interval: 86400, behavior: classical, format: text}
-  yaml: &yaml {type: http, interval: 18000, behavior: classical, format: yaml}  
+  ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs, proxy: 🚀 默认代理}
+  domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs, proxy: 🚀 默认代理}
+  class: &class {type: http, interval: 86400, behavior: classical, format: text, proxy: 🚀 默认代理}
+  yaml: &yaml {type: http, interval: 86400, behavior: classical, format: yaml, proxy: 🚀 默认代理}
 
 rule-providers:
   # 本地 inline 兼容集：不依赖远程下载，只收纳有明确理由的 Real-IP 例外。
@@ -212,8 +213,8 @@ rule-providers:
       - "+.push.apple.com"                                # APNs 可能绕过 VPN，避免依赖 Fake-IP 映射
       - "+.market.xiaomi.com"                             # 小米应用商店兼容；仅改变 DNS 结果，不改变 DIRECT / PROXY 路由
 
-  private_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}  # 私有域名，同时定义 &domain
-  ai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs" }  # AI / ChatGPT 专用域名
+  private_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}  # 私有域名
+  openai_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs"}  # OpenAI / ChatGPT
   youtube_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}  # YouTube
   google_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}  # Google；包含 Google FCM 相关集合
   github_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"}  # GitHub
@@ -231,17 +232,15 @@ rule-providers:
   sciencedirect_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/sciencedirect.mrs"}  # ScienceDirect
   elsevier_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/elsevier.mrs"}  # Elsevier
   clarivate_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/clarivate.mrs"}  # Clarivate
-  
-  proxylite: {<<: *class, url: "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_RULE_REPO/refs/heads/main/ProxyLite.list"}  # 自定义 ProxyLite；请替换为自己的规则源
-  adobeisdumb: {<<: *class, url: "https://raw.githubusercontent.com/ignaciocastro/a-dove-is-dumb/refs/heads/main/clash.yaml"}  # Adobe 屏蔽规则
-  bing_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/bing.mrs"}
-  msn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/msn.mrs"}
-  xbox_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/xbox.mrs"}
 
-  
-  private_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"}
-  cn_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}  # 中国 IP，同时定义 &ip
+  proxylite: {<<: *class, url: "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_RULE_REPO/refs/heads/main/ProxyLite.list"}  # 自定义 ProxyLite；请替换为自己的规则源
+  adobeisdumb: {<<: *yaml, url: "https://raw.githubusercontent.com/ignaciocastro/a-dove-is-dumb/refs/heads/main/clash.yaml"}  # Adobe 屏蔽规则
+  bing_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bing.mrs"}
+  msn_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/msn.mrs"}
+  xbox_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/xbox.mrs"}
+
+  cn_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}  # 中国 IP
   google_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"}  # Google IP
   telegram_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"}  # Telegram IP
   netflix_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"}  # Netflix IP
-  apple_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo-lite/geoip/apple.mrs"}  
+  apple_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo-lite/geoip/apple.mrs"}  # Apple IP
