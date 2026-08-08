@@ -14,3 +14,7 @@ providers/
 .DS_Store
 .idea/
 .vscode/
+
+# Python validator caches
+__pycache__/
+*.py[cod]

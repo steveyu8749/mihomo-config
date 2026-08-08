@@ -1,5 +1,18 @@
 # Changelog
 
+## V4.7
+
+- 重新按 Mihomo v1.19.29 官方文档和核心实现审查全部配置；TUN、Fake-IP、Sniffer、策略组与 OneDrive 特殊分流的总体设计保持不变。
+- 将自定义 `proxylite` 移到全部专用业务域名之后、GFW / 地域规则之前，避免宽泛自定义条目抢先覆盖 Bing、OneDrive、GitHub、Microsoft、Apple 等独立策略组。
+- 显式增加 `mode: rule` 与 `allow-lan: false`，让运行模式和仅本机边界不再依赖默认值。
+- 核实全部启用的 MetaCubeX MRS URL，并统一 Bing、MSN、Xbox 的 URL 写法；Provider 的 `behavior` / `format` 与实际数据保持一致。
+- 补充 `private.mrs` 中 `198.18.0.0/15` 与 Fake-IP 池重叠的核心处理说明；保留 `private_ip,no-resolve`，不会误接管已恢复域名的 Fake-IP 流量。
+- 继续不启用 `respect-rules`；继续使用默认 LRU DNS 缓存，不为未经测量的收益增加 `cache-algorithm: arc`。
+- 明确 Rule Provider 未设置 `proxy` 时会作为 Mihomo 内部连接进入正常路由，而不是固定直连或固定代理。
+- 将仓库校验器扩展为完整检查：重复 YAML 键、顶层字段、策略组与规则目标引用、Provider 类型和 URL、关键顺序、DNS / TUN / Sniffer、进程正则、注释覆盖、脱敏以及文档版本同步。
+- GitHub Actions 改用固定的 Ubuntu 24.04 与 PyYAML 6.0.3，将第三方 Action 固定到已核实的完整提交 SHA，关闭 checkout 凭据持久化，并让 README、Changelog 和设计说明的修改同样触发验证。
+- 重写 README 与设计说明，补全使用边界、排障逻辑、规则优先级和维护方法。
+
 ## V4.6
 
 - 保留 MRS 规则数据层，不依赖 `GEOSITE` / `GEOIP` 或客户端本地 GeoData。
