@@ -2,7 +2,9 @@
 
 ## 目标
 
-V4.6 面向手机和电脑本机运行 Mihomo 的场景。设计优先级：正确分流、局域网兼容、移动端稳定、可解释性、最后才是参数数量。
+V4.6 面向手机和电脑本机运行 Mihomo 的场景。设计优先级是：正确分流、跨客户端一致性、局域网兼容、移动端稳定、可解释性，最后才是 YAML 行数。
+
+V4.6 最终没有采用 GeoData 作为主规则数据库，而是保留 V4.5 的 MRS Rule Provider 数据层，同时完成策略组和 Sniffer 的结构精简。
 
 ## 流量链路
 
@@ -26,7 +28,7 @@ Fake-IP / Real-IP 不负责决定出口；DIRECT / PROXY 只由 Routing Rules �
 
 ## 核心版本前提
 
-建议 Mihomo Core v1.19.10 或更新版本，以获得 Fake-IP TUN 下 DIRECT TCP/UDP 的 `direct-nameserver` 重解析行为。
+建议 Mihomo Core v1.19.10 或更新版本，以获得 Fake-IP TUN 下 DIRECT TCP / UDP 的 `direct-nameserver` 重解析行为。
 
 ## TUN 与 GUI 客户端
 
@@ -46,10 +48,12 @@ Clash Verge Rev 等 GUI 客户端可能通过全局设置参与配置合并，�
 
 ```yaml
 fake-ip-filter:
-  - GEOSITE,private,real-ip
+  - RULE-SET,private_domain,real-ip
   - RULE-SET,fakeip_compat,real-ip
   - MATCH,fake-ip
 ```
+
+`private_domain` 继续使用 MetaCubeX `private.mrs`，避免把私有域解析行为交给客户端本地 GeoData。
 
 `fakeip_compat` 仅保留：
 
@@ -74,70 +78,94 @@ V4.6 统一为：
 ```text
 识别域名：是
 覆盖目标：否
+skip-domain：无
 ```
 
-全局 `override-destination: false`，HTTP 不再单独覆盖。Sniffer 仅在缺少 Fake-IP/DNSMapping 域名时作为补充识别来源。
+全局 `override-destination: false`，HTTP / TLS / QUIC 都不再局部覆盖。Sniffer 只在缺少 Fake-IP / DNSMapping 域名时作为补充识别来源。
 
-现有微信、QQ、小米 `skip-domain` 暂时保留，避免 V4.6 同时改变过多兼容变量。
+V4.6 删除此前的微信、QQ、小米 `skip-domain`。既然 Sniffer 不再改写实际目标，就不预防性禁止这些域名被识别；若未来出现可复现问题，再按最小范围加回。
 
 ## 策略组
 
-删除地区筛选、fallback 和 url-test。节点选择变为完全手工：
+删除地区筛选、fallback、url-test 和共享 `🌐 全部节点`。
+
+`🚀 默认代理`：
 
 ```text
-🚀 默认代理
-  → 🌐 全部节点
-      → 手工选择节点
+select
++ include-all
++ exclude-type: direct
 ```
 
-机场 Proxy Provider 的 health-check 独立保留，用于节点健康状态，不依赖自动策略组。
+因此它始终表示代理出口，不再允许被误切为硬 DIRECT。
 
-## GeoData 与 Rule Provider
-
-V4.6 采用混合架构：
+每个业务组也直接 `include-all`：
 
 ```text
-公共域名分类 → GEOSITE
-中国 IP      → GEOIP,CN（默认 MMDB）
-定制规则      → RULE-SET
-服务 IP       → MRS RULE-SET
+业务组
+├─ 🚀 默认代理
+├─ 🎯 直连
+└─ 全部具体代理节点
 ```
 
-不设置 `geodata-mode: true`，因此 `GEOIP,CN` 不要求切换到 `geoip.dat`。GeoSite 依赖 `geosite.dat`，由客户端管理；配置不重复启用 `geo-auto-update` 或指定 `geox-url`。
+这样不同业务可以独立选择不同节点，同时 `store-selected: true` 保存各自状态。机场 Proxy Provider 的 health-check 独立保留，用于节点健康状态，不依赖自动策略组。
 
-Rule Provider 最终只保留：
+## 为什么不用 GeoData
 
-- `fakeip_compat`
-- `proxylite`
-- `adobeisdumb`
-- `google_ip`
-- `telegram_ip`
-- `netflix_ip`
+V4.6 最终选择统一 MRS 数据层：
 
-远程 Provider 每 24 小时更新，并通过 `🚀 默认代理` 拉取。
+```text
+公共域名分类 → domain MRS Rule Provider
+服务 / 中国 IP → ipcidr MRS Rule Provider
+定制规则      → classical Rule Provider
+兼容集合      → inline Rule Provider
+```
+
+主要考虑：
+
+1. 配置同时用于手机和电脑，MRS 能让不同客户端引用完全相同的规则 URL；
+2. 不依赖各客户端本地 `geosite.dat` / `geoip.dat` 是否存在、是否更新、是否包含某个 tag；
+3. MRS 是二进制 Rule Set，日常规则匹配在本地完成；Provider 数量主要影响更新与缓存管理，而不是每个连接都产生网络请求；
+4. 数据来源、更新周期和引用关系都可以直接从 YAML 与 CI 审计。
+
+因此 V4.6 不配置 `GEOSITE`、`GEOIP`、`geodata-mode`、`geo-auto-update` 或 `geox-url`。
+
+## Rule Provider
+
+远程 Rule Provider 统一按 24 小时更新；机场 Proxy Provider 的刷新周期仍为 5 小时。
+
+所有远程 Rule Provider 使用：
+
+```yaml
+proxy: 🚀 默认代理
+```
+
+由于 `🚀 默认代理` 已排除 direct 类型，GitHub Raw 更新不会因用户把默认组切成直连而退化为 DIRECT。
+
+Domain / IPCIDR 公共规则继续使用 `format: mrs`。ProxyLite 和 Adobe 保留 classical text/yaml；`fakeip_compat` 继续使用 inline。
 
 ## 规则顺序
 
 专用分类继续位于父集合之前：
 
 ```text
-onedrive → microsoft
-github   → microsoft
-youtube  → google
+onedrive_domain → microsoft_domain
+github_domain   → microsoft_domain
+youtube_domain  → google_domain
 ```
 
 宽泛分类保持：
 
 ```text
-gfw
+gfw_domain
 → geolocation-!cn
-→ cn
+→ cn_domain
 → service IP fallback
-→ GEOIP,CN
+→ cn_ip
 → MATCH
 ```
 
-APNs 显式规则继续位于 `apple-cn` 前，DNS 同时通过 `fakeip_compat` 保持 Real-IP。
+APNs 显式规则继续位于 `apple_domain` 前，DNS 同时通过 `fakeip_compat` 保持 Real-IP。
 
 ## 维护原则
 
