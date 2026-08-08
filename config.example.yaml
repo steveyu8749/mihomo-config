@@ -45,8 +45,8 @@ ipv6: false                                               # 全局关闭 IPv6，
 unified-delay: true                                       # 统一延迟计算方式，减少不同协议测试偏差
 tcp-concurrent: true                                      # 同一目标可并发尝试多个 IP，加快建连
 log-level: warning                                        # 只记录 warning 及以上日志，减少日常噪声
-keep-alive-idle: 600
-keep-alive-interval: 15
+keep-alive-idle: 600                                      # TCP 连接最多空闲 600 秒后开始发送 Keep Alive 探测
+keep-alive-interval: 15                                   # TCP Keep Alive 探测包间隔 15 秒
 find-process-mode: strict                                 # 进程匹配模式；用于桌面端 PROCESS-NAME 分流
 
 profile:                                                  # 需要跨重启保存的运行状态
@@ -154,19 +154,22 @@ rules:                                                    # 实际流量分流�
   - RULE-SET,private_domain,直连                           # 私有域名优先硬直连，避免被进程或业务规则提前接管
   - RULE-SET,private_ip,直连,no-resolve                    # 私有/保留 IP 优先硬直连；补充 mixed/redir/tproxy 等未被 TUN 路由排除覆盖的流量
 
-  - PROCESS-NAME-REGEX,.*spotify.*,直连
+  # PROCESS-NAME 忽略大小写精确匹配进程名；Android 上也可精确匹配应用包名。
+  # PROCESS-NAME-REGEX 忽略大小写进行正则匹配，适合同时覆盖多个进程名或包名变体；只有简单通配需求时也可改用 PROCESS-NAME-WILDCARD。
+  # 进程规则依赖客户端/系统能够提供进程信息；路由器等无法识别终端进程的环境不会命中。
+  - PROCESS-NAME-REGEX,.*spotify.*,直连                    # 名称或 Android 包名中包含 spotify 的进程硬直连
   - PROCESS-NAME,onedrive.exe,直连                         # Windows OneDrive 客户端可正常直连；网页版仍由 onedrive_domain 分流
-  - PROCESS-NAME-REGEX,.*xboxone.*,🪟 Microsoft
-  - PROCESS-NAME,com.microsoft.bing,🪟 Microsoft
-  
+  - PROCESS-NAME-REGEX,.*xboxone.*,🪟 Microsoft            # 名称或 Android 包名中包含 xboxone 的进程进入 Microsoft 组
+  - PROCESS-NAME,com.microsoft.bing,🪟 Microsoft           # Android Bing 包名精确匹配并进入 Microsoft 组
+
   - RULE-SET,ai_domain,🤖 ChatGPT                          # 境外 AI 聚合规则统一复用 ChatGPT 策略组
-  - RULE-SET,sciencedirect_domain,直连                  # ScienceDirect 直连
-  - RULE-SET,elsevier_domain,直连                       # Elsevier 直连
-  - RULE-SET,clarivate_domain,直连                      # Clarivate 直连
+  - RULE-SET,sciencedirect_domain,直连                     # ScienceDirect 学术资源硬直连
+  - RULE-SET,elsevier_domain,直连                          # Elsevier 学术资源硬直连
+  - RULE-SET,clarivate_domain,直连                         # Clarivate / Web of Science 相关资源硬直连
   - RULE-SET,proxylite,🚀 默认代理                         # 自定义 ProxyLite 走默认代理
-  - RULE-SET,bing_domain,🪟 Microsoft
-  - RULE-SET,msn_domain,🪟 Microsoft
-  - RULE-SET,xbox_domain,🪟 Microsoft
+  - RULE-SET,bing_domain,🪟 Microsoft                     # Bing 域名进入 Microsoft 组；必须位于 microsoft_domain 前
+  - RULE-SET,msn_domain,🪟 Microsoft                      # MSN 域名进入 Microsoft 组；必须位于 microsoft_domain 前
+  - RULE-SET,xbox_domain,🪟 Microsoft                     # Xbox 域名进入 Microsoft 组；必须位于 microsoft_domain 前
   - RULE-SET,onedrive_domain,🐬 OneDrive                  # OneDrive 独立策略组；需位于 Microsoft 前
   - RULE-SET,github_domain,👨🏿‍💻 GitHub                    # GitHub 独立策略组；Microsoft 集合包含 GitHub，因此需优先
   - RULE-SET,microsoft_domain,🪟 Microsoft                # Microsoft 宽泛策略组
@@ -182,8 +185,8 @@ rules:                                                    # 实际流量分流�
   - RULE-SET,paypal_domain,💶 PayPal                      # PayPal 独立策略组
   - RULE-SET,gfw_domain,🚀 默认代理                        # GFW 域名走默认代理
   - RULE-SET,geolocation-!cn,🚀 默认代理                   # 非中国域名优先代理，避免与宽泛 CN 集合交叉时被直连抢先
-  - RULE-SET,cn_domain,直连                               # 其余中国域名硬直连
-  
+  - RULE-SET,cn_domain,直连                                # 其余中国域名硬直连
+
   - RULE-SET,apple_ip,🍎 Apple,no-resolve                 # Apple 域名由 apple_domain 处理；此处只兜底已有真实 IP 的连接
   - RULE-SET,google_ip,🍀 Google,no-resolve               # Google IP 兜底
   - RULE-SET,netflix_ip,🎥 NETFLIX,no-resolve             # Netflix IP 兜底
@@ -197,19 +200,19 @@ rules:                                                    # 实际流量分流�
 # HTTP Rule Provider 默认每 24 小时更新；公共域名与服务 IP 均使用 MRS，避免依赖客户端 GeoData。
 # Rule Provider 不固定下载出口；更新请求作为 Mihomo 内部连接，按照当前路由规则选择出口。
 # type：可选http/file/inline  behavior：可选domain/ipcidr/classical format：可选yaml/text/mrs
-rule-anchor:
-  ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs}
-  domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}
+rule-anchor:                                              # Rule Provider 公共模板；该键只用于定义 YAML Anchor
+  ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs}  # 远程 IP CIDR MRS：每 24 小时更新
+  domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}  # 远程域名 MRS：每 24 小时更新
   # domaintxt: &domaintxt {type: http, interval: 86400, behavior: domain, format: text}  # 暂未使用，需要 domain text Provider 时再启用
-  class: &class {type: http, interval: 86400, behavior: classical, format: text}
+  class: &class {type: http, interval: 86400, behavior: classical, format: text}  # 远程 Classical 文本规则：每 24 小时更新
   # yaml: &yaml {type: http, interval: 18000, behavior: classical, format: yaml}  # Adobe 桌面端规则启用时一并恢复
 
-rule-providers:
+rule-providers:                                          # rules 与 DNS Fake-IP Filter 引用的规则集总表
   # 本地 inline 兼容集：不依赖远程下载，只收纳有明确理由的 Real-IP 例外。
-  fakeip_compat:
-    type: inline
-    behavior: domain
-    payload:
+  fakeip_compat:                                         # Fake-IP 兼容域名集合；只改变 DNS 返回方式，不决定路由出口
+    type: inline                                         # 规则直接写在当前配置中，不下载远程文件
+    behavior: domain                                     # payload 按域名规则解释
+    payload:                                             # 需要返回 Real-IP 的最小域名列表
       - dns.msftncsi.com                                  # Windows NCSI DNS 探测要求固定真实 A 记录
       - "+.push.apple.com"                                # APNs 可能绕过 VPN，避免依赖 Fake-IP 映射
       - "+.market.xiaomi.com"                             # 小米应用商店兼容；仅改变 DNS 结果，不改变 DIRECT / PROXY 路由
@@ -232,18 +235,17 @@ rule-providers:
   cn_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}  # 中国域名
   sciencedirect_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/sciencedirect.mrs"}  # ScienceDirect
   elsevier_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/elsevier.mrs"}  # Elsevier
-  clarivate_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/clarivate.mrs"}  # Clarivate
-  
+  clarivate_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/clarivate.mrs"}  # Clarivate / Web of Science
+
   proxylite: {<<: *class, url: "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_RULE_REPO/refs/heads/main/ProxyLite.list"}  # 自定义 ProxyLite；请替换为自己的规则源
   # adobeisdumb: {<<: *yaml, url: "https://raw.githubusercontent.com/ignaciocastro/a-dove-is-dumb/refs/heads/main/clash.yaml"}  # 仅桌面端按需启用
-  bing_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/bing.mrs"}
-  msn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/msn.mrs"}
-  xbox_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/xbox.mrs"}
+  bing_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/bing.mrs"}  # Bing 独立域名集合
+  msn_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/msn.mrs"}  # MSN 独立域名集合
+  xbox_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/xbox.mrs"}  # Xbox 独立域名集合
 
-  
   private_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"}  # 私有/保留 IP；为非 TUN 或未命中 route-exclude 的流量提供规则层直连兜底
   cn_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}  # 中国 IP；为未命中域名规则的国内目标提供解析兜底
   google_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"}  # Google IP
   telegram_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"}  # Telegram IP
   netflix_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"}  # Netflix IP
-  apple_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo-lite/geoip/apple.mrs"}  
+  apple_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo-lite/geoip/apple.mrs"}  # Apple IP 精简集合；配合 no-resolve 仅兜底已有真实目标 IP 的连接

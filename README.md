@@ -157,6 +157,34 @@ proxies: [🚀 默认代理, 直连]
 
 需要注意：`🤖 ChatGPT` 当前使用 `category-ai-!cn` 聚合集合，因此也会接管 Claude、Copilot、Perplexity 等其他境外 AI 服务。这是当前配置的有意选择，不是 OpenAI 专用规则。
 
+### 进程名规则
+
+这两类规则的基本格式都是：
+
+```text
+规则类型,进程名或表达式,目标策略组
+```
+
+`PROCESS-NAME` 用于忽略大小写的精确匹配：
+
+```yaml
+- PROCESS-NAME,onedrive.exe,直连
+- PROCESS-NAME,com.microsoft.bing,🪟 Microsoft
+```
+
+第一条匹配 Windows 进程名，第二条在 Android 上匹配应用包名。已知唯一、稳定的进程名时应优先使用这种写法，范围最清楚。
+
+`PROCESS-NAME-REGEX` 用于忽略大小写的正则匹配：
+
+```yaml
+- PROCESS-NAME-REGEX,.*spotify.*,直连
+- PROCESS-NAME-REGEX,^spotify(?:\.exe)?$,直连
+```
+
+第一条匹配名称或包名中任何包含 `spotify` 的进程；第二条只匹配 `spotify` 或 `spotify.exe`。正则没有 `^`、`$` 时可以命中字符串的一部分，范围可能比预期更宽。只有简单的 `*`、`?` 通配需求时，也可以使用更易读的 `PROCESS-NAME-WILDCARD`。
+
+进程规则依赖操作系统或客户端提供进程信息。桌面端 TUN 通常可以使用；Android 可以匹配应用包名；部署在路由器上的 Mihomo 通常无法知道终端设备上的具体进程，因此不会命中这类规则。当前 `find-process-mode: strict` 会在规则需要时查询进程信息。
+
 ### OneDrive 的特殊处理
 
 Windows OneDrive 客户端能够正常直连上传，因此配置在域名规则之前保留：

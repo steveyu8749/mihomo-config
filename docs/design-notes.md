@@ -120,6 +120,8 @@ Apple 组同样提供硬直连和默认代理两个选择，但顺序相反，�
 - Windows `onedrive.exe` 硬直连；
 - Xbox 和 Android Bing 进入 Microsoft 组。
 
+`PROCESS-NAME` 对进程名执行忽略大小写的精确匹配，Android 上也可匹配包名；`PROCESS-NAME-REGEX` 使用忽略大小写的正则匹配，适合覆盖多个进程名或包名变体。已知稳定名称时优先使用精确规则，避免正则范围过宽。两者都依赖运行平台能够提供进程信息，路由器侧无法识别下游设备进程时不会命中。
+
 OneDrive 的特殊设计是有意的：本地客户端可正常直连同步，但网页版需要代理。浏览器不会命中 `onedrive.exe`，随后由 `onedrive_domain` 进入独立策略组。
 
 ## 域名与 IP 规则

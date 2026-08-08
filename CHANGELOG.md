@@ -15,6 +15,7 @@
 - `category-ai-!cn` 保持为境外 AI 聚合集合，并统一复用 `🤖 ChatGPT` 策略组。
 - Adobe 规则、Provider 和专用 YAML 锚点默认全部注释，只在桌面端按需启用。
 - Bing、MSN、Xbox 继续单独列出并位于 Microsoft 宽泛集合之前。
+- 补齐配置模板中遗漏的字段和规则注释，并补充 `PROCESS-NAME` / `PROCESS-NAME-REGEX` 的使用说明。
 - 不启用 `allow-lan`、`respect-rules`、GeoData 自动更新或自定义 `geox-url`。
 - 重写 README 和设计说明，使文档、注释、校验脚本与实际配置保持一致。
 
