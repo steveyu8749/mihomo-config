@@ -17,11 +17,17 @@ REQUIRED_FAKEIP_COMPAT = {
 }
 REQUIRED_RULES = {
     "RULE-SET,private_domain,直连",
+    "RULE-SET,private_ip,直连,no-resolve",
+    "PROCESS-NAME,onedrive.exe,直连",
     "RULE-SET,cn_domain,直连",
     "RULE-SET,cn_ip,直连",
+    "RULE-SET,apple_ip,🍎 Apple,no-resolve",
 }
 RULE_ORDER = [
     ("RULE-SET,geolocation-!cn,", "RULE-SET,cn_domain,", "geolocation-!cn must appear before cn_domain"),
+    ("RULE-SET,bing_domain,", "RULE-SET,microsoft_domain,", "bing_domain must appear before microsoft_domain"),
+    ("RULE-SET,msn_domain,", "RULE-SET,microsoft_domain,", "msn_domain must appear before microsoft_domain"),
+    ("RULE-SET,xbox_domain,", "RULE-SET,microsoft_domain,", "xbox_domain must appear before microsoft_domain"),
     ("RULE-SET,onedrive_domain,", "RULE-SET,microsoft_domain,", "onedrive_domain must appear before microsoft_domain"),
     ("RULE-SET,github_domain,", "RULE-SET,microsoft_domain,", "github_domain must appear before microsoft_domain"),
     ("RULE-SET,youtube_domain,", "RULE-SET,google_domain,", "youtube_domain must appear before google_domain"),
@@ -133,6 +139,8 @@ def main() -> int:
     for group in groups:
         if not isinstance(group, dict):
             continue
+        if group.get("name") != DEFAULT_PROXY and group.get("include-all") is True:
+            fail(errors, f"only {DEFAULT_PROXY} may use include-all: true")
         if group.get("type") in {"fallback", "url-test"}:
             fail(errors, f"proxy-group {group.get('name')!r} reintroduces removed automatic selection")
         if group.get("name") == "🌐 全部节点":
@@ -187,10 +195,18 @@ def main() -> int:
         for item in sorted(REQUIRED_FAKEIP_COMPAT - payload):
             fail(errors, f"fakeip_compat missing required domain pattern: {item}")
 
+    apple_provider = providers.get("apple_domain")
+    if not isinstance(apple_provider, dict):
+        fail(errors, "missing apple_domain rule-provider")
+    elif not str(apple_provider.get("url", "")).endswith("/apple.mrs"):
+        fail(errors, "apple_domain must use the complete apple.mrs ruleset")
+
     if sniffer.get("enable") is not True:
         fail(errors, "sniffer must remain enabled")
     if sniffer.get("override-destination") is not False:
         fail(errors, "sniffer override-destination must remain false")
+    if sniffer.get("skip-domain"):
+        fail(errors, "sniffer skip-domain must remain empty unless a reproducible exception is documented")
 
     if data.get("allow-lan") is True:
         fail(errors, "allow-lan must not be enabled in the local-only public template")

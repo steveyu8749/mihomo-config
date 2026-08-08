@@ -2,20 +2,26 @@
 
 ## 目标
 
-V4.6 面向手机和电脑本机运行 Mihomo 的场景。设计优先级是：正确分流、跨客户端一致性、局域网兼容、移动端稳定、可解释性，最后才是 YAML 行数。
+V4.6 面向手机和电脑本机运行 Mihomo 的场景。设计优先级依次是：
 
-V4.6 最终没有采用 GeoData 作为主规则数据库，而是保留 V4.5 的 MRS Rule Provider 数据层，同时完成策略组和 Sniffer 的结构精简。
+1. 分流语义正确；
+2. 手机和电脑行为尽量一致；
+3. 局域网与系统功能兼容；
+4. 配置可解释、可验证；
+5. 最后才考虑减少 YAML 行数。
+
+模板使用独立 MRS Rule Provider，不依赖客户端内置 GeoData；节点完全手工选择，不维护地区筛选和自动策略组。
 
 ## 流量链路
 
 ```text
-系统 / App
+系统 / 应用
   ↓
-DNS（默认 Fake-IP，少量 Real-IP）
+Mihomo DNS
   ↓
 TUN
   ↓
-Fake-IP / DNSMapping / Sniffer 恢复域名
+Fake-IP 映射 / DNSMapping / Sniffer 恢复域名
   ↓
 Rules
   ↓
@@ -24,25 +30,25 @@ Rules
 DIRECT / Proxy
 ```
 
-Fake-IP / Real-IP 不负责决定出口；DIRECT / PROXY 只由 Routing Rules 决定。
+Fake-IP / Real-IP 只决定 DNS 返回值，不决定出口。DIRECT / PROXY 只由路由规则和策略组决定。
 
-## 核心版本前提
+## 核心版本
 
-建议 Mihomo Core v1.19.10 或更新版本，以获得 Fake-IP TUN 下 DIRECT TCP / UDP 的 `direct-nameserver` 重解析行为。
+建议使用 Mihomo Core v1.19.10 或更新版本，以获得 Fake-IP TUN 下 DIRECT TCP / UDP 的 `direct-nameserver` 重解析行为。CI 当前固定使用 v1.19.29。
 
-## TUN 与 GUI 客户端
+## TUN 与本机边界
 
-TUN 块继续作为跨客户端基线：
+TUN 作为手机和电脑的共同基线：
 
-- `stack: mixed`
-- DNS hijack 53/UDP + 53/TCP
-- `auto-route`
-- `auto-detect-interface`
-- RFC1918、Link-local、Multicast、Limited Broadcast 路由排除
+- `stack: mixed`；
+- 劫持 TCP / UDP 53 端口 DNS；
+- `auto-route: true`；
+- `auto-detect-interface: true`；
+- RFC1918、链路本地、组播和广播地址绕过 TUN。
 
-Clash Verge Rev 等 GUI 客户端可能通过全局设置参与配置合并，因此排障时应查看最终运行配置，而不是只看订阅 YAML。
+`allow-lan` 不启用。它控制其他局域网设备能否访问本机代理端口，与本机访问 NAS、路由器、米家设备或 mDNS 不是同一问题。
 
-`allow-lan` 不启用：它用于允许其他局域网设备访问本机代理端口，与本机访问 NAS、米家设备、mDNS 等不是同一问题。
+Clash Verge Rev 等 GUI 客户端可能合并或覆写 TUN / DNS 字段，因此排障时必须查看最终运行配置。
 
 ## DNS / Fake-IP
 
@@ -53,9 +59,7 @@ fake-ip-filter:
   - MATCH,fake-ip
 ```
 
-`private_domain` 继续使用 MetaCubeX `private.mrs`，避免把私有域解析行为交给客户端本地 GeoData。
-
-`fakeip_compat` 仅保留：
+`private_domain` 负责私有/本地域名；`fakeip_compat` 只保留：
 
 ```text
 dns.msftncsi.com
@@ -63,17 +67,17 @@ dns.msftncsi.com
 +.market.xiaomi.com
 ```
 
-不恢复整个 `cn -> real-ip`，不添加 NTP、STUN、UU、音乐、游戏等大范围兼容列表。
+不恢复整个 `cn_domain -> real-ip`，也不预先加入 NTP、STUN、游戏或厂商大类例外。
 
 ### respect-rules
 
-不启用。该选项控制 DNS 上游连接是否遵守 Routing Rules，并要求配套 `proxy-server-nameserver`。当前 AliDNS / DNSPod 本来就应直接访问，开启后路径通常仍为 DIRECT，却增加节点域名解析和 bootstrap 依赖。
+当前不启用。它控制 DNS 上游连接本身是否匹配路由规则，并不决定被查询域名的业务流量出口。
 
-如果未来默认 DNS 改为必须经代理访问的海外 DoH，再重新评估。
+主 DNS 是 AliDNS 和 DNSPod DoH，本来就适合直接连接。启用 `respect-rules` 通常不会改变结果，却需要额外处理 `proxy-server-nameserver` 和节点域名启动依赖。以后如果默认 DNS 改为必须经代理访问的境外 DoH，再重新评估。
 
 ## Sniffer
 
-V4.6 统一为：
+Sniffer 统一遵循：
 
 ```text
 识别域名：是
@@ -81,15 +85,13 @@ V4.6 统一为：
 skip-domain：无
 ```
 
-全局 `override-destination: false`，HTTP / TLS / QUIC 都不再局部覆盖。Sniffer 只在缺少 Fake-IP / DNSMapping 域名时作为补充识别来源。
+`override-destination: false` 适用于 HTTP、TLS 和 QUIC。Sniffer 只在缺少 Fake-IP / DNSMapping 域名时补充识别信息，不替换原始连接目标。
 
-V4.6 删除此前的微信、QQ、小米 `skip-domain`。既然 Sniffer 不再改写实际目标，就不预防性禁止这些域名被识别；若未来出现可复现问题，再按最小范围加回。
+只有在问题可复现并确认由嗅探造成时，才添加最小范围的跳过项。
 
 ## 策略组
 
-删除地区筛选、fallback、url-test 和共享 `🌐 全部节点`。
-
-`🚀 默认代理`：
+`🚀 默认代理` 使用：
 
 ```text
 select
@@ -97,76 +99,88 @@ select
 + exclude-type: direct
 ```
 
-因此它始终表示代理出口，不再允许被误切为硬 DIRECT。
+它直接收纳全部代理节点，并且始终保持“代理出口”语义。
 
-每个业务组也直接 `include-all`：
+业务组只包含：
 
 ```text
-业务组
-├─ 🚀 默认代理
-├─ 🎯 直连
-└─ 全部具体代理节点
+🚀 默认代理
+直连
 ```
 
-这样不同业务可以独立选择不同节点，同时 `store-selected: true` 保存各自状态。机场 Proxy Provider 的 health-check 独立保留，用于节点健康状态，不依赖自动策略组。
+因此不同业务可以选择继承默认节点或硬直连，但不能在每个业务组里直接展开全部节点。这样减少重复节点列表，也避免多个业务组各自维护大量具体节点状态。
 
-## 为什么不用 GeoData
+Apple 组同样提供硬直连和默认代理两个选择，但顺序相反，默认优先直连。
 
-V4.6 最终选择统一 MRS 数据层：
+## 进程规则
+
+进程规则放在业务域名规则之前：
+
+- Spotify 进程硬直连；
+- Windows `onedrive.exe` 硬直连；
+- Xbox 和 Android Bing 进入 Microsoft 组。
+
+OneDrive 的特殊设计是有意的：本地客户端可正常直连同步，但网页版需要代理。浏览器不会命中 `onedrive.exe`，随后由 `onedrive_domain` 进入独立策略组。
+
+## 域名与 IP 规则
+
+专用分类位于宽泛父集合之前：
+
+```text
+bing / msn / xbox → microsoft
+onedrive           → microsoft
+github             → microsoft
+youtube            → google
+geolocation-!cn    → cn_domain
+```
+
+Apple 使用完整 `apple.mrs`。域名流量由 `apple_domain` 处理，因此 `apple_ip` 使用 `no-resolve`，只兜底已有真实目标 IP 的连接。
+
+`cn_ip` 有意不使用 `no-resolve`。未命中域名集合的目标可以在最后的中国 IP 规则处解析：
+
+```text
+解析到中国 IP → 直连
+不是中国 IP   → MATCH
+```
+
+这会为少量未知域名增加一次 DNS 查询，但保留了国内 IP 兜底能力。
+
+`category-ai-!cn` 是境外 AI 聚合集合，并非 OpenAI 专用集合。当前统一复用 `🤖 ChatGPT` 策略组。
+
+## Rule Provider
+
+规则数据按以下方式组织：
 
 ```text
 公共域名分类 → domain MRS Rule Provider
 服务 / 中国 IP → ipcidr MRS Rule Provider
-定制规则      → classical Rule Provider
-兼容集合      → inline Rule Provider
+ProxyLite      → classical text Rule Provider
+兼容集合       → inline Rule Provider
 ```
+
+HTTP Rule Provider 默认每 24 小时更新，不指定固定下载代理。更新请求作为 Mihomo 内部连接，由当前路由规则决定出口。
+
+Proxy Provider 不同：它需要在首次启动时提供代理节点，因此订阅文件固定使用硬直连下载，避免循环依赖。
+
+Adobe classical YAML 规则默认关闭。桌面端如需启用，必须同时恢复路由规则、`&yaml` 锚点和 `adobeisdumb` Provider；手机端保持注释。
+
+## 为什么不用 GeoData
+
+V4.6 不配置 `GEOSITE`、`GEOIP`、`geodata-mode`、`geo-auto-update` 或 `geox-url`。
 
 主要考虑：
 
-1. 配置同时用于手机和电脑，MRS 能让不同客户端引用完全相同的规则 URL；
-2. 不依赖各客户端本地 `geosite.dat` / `geoip.dat` 是否存在、是否更新、是否包含某个 tag；
-3. MRS 是二进制 Rule Set，日常规则匹配在本地完成；Provider 数量主要影响更新与缓存管理，而不是每个连接都产生网络请求；
-4. 数据来源、更新周期和引用关系都可以直接从 YAML 与 CI 审计。
-
-因此 V4.6 不配置 `GEOSITE`、`GEOIP`、`geodata-mode`、`geo-auto-update` 或 `geox-url`。
-
-## Rule Provider
-
-远程 Rule Provider 统一按 24 小时更新；机场 Proxy Provider 的刷新周期仍为 5 小时。
-
-所有远程 Rule Provider 使用：
-
-```yaml
-proxy: 🚀 默认代理
-```
-
-由于 `🚀 默认代理` 已排除 direct 类型，GitHub Raw 更新不会因用户把默认组切成直连而退化为 DIRECT。
-
-Domain / IPCIDR 公共规则继续使用 `format: mrs`。ProxyLite 和 Adobe 保留 classical text/yaml；`fakeip_compat` 继续使用 inline。
-
-## 规则顺序
-
-专用分类继续位于父集合之前：
-
-```text
-onedrive_domain → microsoft_domain
-github_domain   → microsoft_domain
-youtube_domain  → google_domain
-```
-
-宽泛分类保持：
-
-```text
-gfw_domain
-→ geolocation-!cn
-→ cn_domain
-→ service IP fallback
-→ cn_ip
-→ MATCH
-```
-
-APNs 显式规则继续位于 `apple_domain` 前，DNS 同时通过 `fakeip_compat` 保持 Real-IP。
+1. 手机和电脑引用完全相同的规则 URL；
+2. 不依赖各客户端本地 GeoData 是否更新、是否包含某个标签；
+3. MRS 匹配在本地完成，Provider 更新不会让每次连接访问网络；
+4. 数据来源、格式、更新周期和引用关系都能从 YAML 与 CI 直接审计。
 
 ## 维护原则
 
-新增特殊项前确认三个条件：问题可复现、能定位到具体机制、例外范围可以足够小。否则不添加。
+新增特殊项前确认三个条件：
+
+1. 问题可以稳定复现；
+2. 能定位到具体机制；
+3. 例外范围可以缩到足够小。
+
+默认机制能够解决的问题，不继续增加特殊规则。

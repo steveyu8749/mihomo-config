@@ -2,19 +2,21 @@
 
 ## V4.6
 
-- 保留 V4.5 的 MRS 规则数据层，不再依赖 `GEOSITE` / `GEOIP` 或客户端 GeoData；域名与 IP 公共分类继续通过独立 MRS Rule Provider 加载。
-- Sniffer 改为完全“只识别、不改目标”：删除 HTTP 单独的 `override-destination: true`，HTTP / TLS / QUIC 均不覆盖实际目标。
-- 删除全部 Sniffer `skip-domain`；以后只在问题可稳定复现且确认由嗅探导致时按最小范围加回。
-- 删除所有地区筛选、fallback、url-test 自动策略组，以及共享 `🌐 全部节点` 中间组。
-- `🚀 默认代理` 改为 `select + include-all + exclude-type: direct`，直接包含所有代理节点且不提供硬 DIRECT。
-- 每个业务策略组同样直接 `include-all`，既可继承 `🚀 默认代理`，也可为单一服务独立手工选择具体节点。
-- 机场 Proxy Provider 健康检查保持启用；订阅刷新仍为 18000 秒，健康检查仍为 600 秒。
-- `fake-ip-filter` 保持 `private_domain -> real-ip`、`fakeip_compat -> real-ip`、`MATCH -> fake-ip`，普通国内域名继续默认 Fake-IP。
-- `private_domain`、OpenAI、Google、GitHub、Microsoft、Apple CN、GFW、CN 等公共域名恢复为 MRS Provider；`cn_ip`、Google、Telegram、Netflix IP 同样使用 MRS。
-- 远程 Rule Provider 继续使用 86400 秒更新周期，下载统一通过 `🚀 默认代理`。
-- 不启用 `allow-lan`、`respect-rules`、`geodata-mode`、`geo-auto-update` 或自定义 `geox-url`。
-- TUN 继续作为跨客户端基线保留；Clash Verge Rev 等 GUI 客户端仍应以最终运行配置为准。
-- 公开模板恢复完整解释性注释，重点说明各参数存在的理由和 V4.6 的取舍。
+- 保留 MRS 规则数据层，不依赖 `GEOSITE` / `GEOIP` 或客户端本地 GeoData。
+- Sniffer 统一为“只识别、不改目标”，HTTP / TLS / QUIC 均不覆盖原始连接目标，并删除预防性的 `skip-domain`。
+- 删除地区筛选、fallback、url-test 和共享 `🌐 全部节点`；只让 `🚀 默认代理` 使用 `include-all`，业务组改为在 `🚀 默认代理` 与硬直连之间选择。
+- Proxy Provider 继续每 5 小时刷新订阅、每 10 分钟执行节点健康检查，并使用硬直连完成首次启动的节点加载。
+- Rule Provider 不再固定下载代理，更新请求由当前路由规则决定；HTTP Provider 默认每 24 小时更新。
+- DNS 使用规则模式 Fake-IP Filter：私有域名和最小兼容集合返回 Real-IP，其余域名统一返回 Fake-IP。
+- 新增 `private_ip -> 直连,no-resolve`，为未被 TUN 路由排除覆盖的私有/保留 IP 提供规则层兜底。
+- 保留 `cn_ip` 的解析能力，用中国 IP 识别未命中域名规则的国内目标；`apple_ip` 改为 `no-resolve`。
+- Apple 域名由 `apple-cn.mrs` 扩展为完整的 `apple.mrs`。
+- Windows `onedrive.exe` 保持硬直连，网页版 OneDrive 继续进入独立策略组。
+- `category-ai-!cn` 保持为境外 AI 聚合集合，并统一复用 `🤖 ChatGPT` 策略组。
+- Adobe 规则、Provider 和专用 YAML 锚点默认全部注释，只在桌面端按需启用。
+- Bing、MSN、Xbox 继续单独列出并位于 Microsoft 宽泛集合之前。
+- 不启用 `allow-lan`、`respect-rules`、GeoData 自动更新或自定义 `geox-url`。
+- 重写 README 和设计说明，使文档、注释、校验脚本与实际配置保持一致。
 
 ## V4.5
 
