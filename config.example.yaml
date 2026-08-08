@@ -181,6 +181,7 @@ rules:                                                    # 实际流量分流�
   - RULE-SET,gfw_domain,🚀 默认代理                        # GFW 域名走默认代理
   - RULE-SET,geolocation-!cn,🚀 默认代理                   # 非中国域名优先代理，避免与宽泛 CN 集合交叉时被直连抢先
   - RULE-SET,cn_domain,🎯 直连                             # 其余中国域名走可切换直连
+  
   - RULE-SET,apple_ip,🍎 Apple 
   - RULE-SET,google_ip,🍀 Google,no-resolve               # Google IP 兜底
   - RULE-SET,netflix_ip,🎥 NETFLIX,no-resolve             # Netflix IP 兜底
