@@ -132,7 +132,7 @@ proxy-groups:                                             # 所有可在客户�
     type: select                                          # 完全手工选择
     proxies: [🚀 默认代理, 直连]                           # 优先继承默认代理，也允许切换到可控直连组
 
-  - {<<: *service, name: 🤖 Ai}                      # OpenAI / ChatGPT 独立策略组
+  - {<<: *service, name: 🤖 ChatGPT}                      # OpenAI / ChatGPT 独立策略组
   - {<<: *service, name: 📹 YouTube}                      # YouTube 独立策略组
   - {<<: *service, name: 🍀 Google}                       # Google / Android FCM 独立策略组
   - {<<: *service, name: 👨🏿‍💻 GitHub}                       # GitHub 独立策略组
@@ -157,7 +157,7 @@ rules:                                                    # 实际流量分流�
   - PROCESS-NAME,com.microsoft.bing,🪟 Microsoft
   
   - RULE-SET,private_domain,直连                           # 私有域名硬直连
-  - RULE-SET,ai_domain,🤖 Ai                     # OpenAI / ChatGPT 使用专用规则，避免误收其他 AI 服务
+  - RULE-SET,ai_domain,🤖 ChatGPT                     # OpenAI / ChatGPT 使用专用规则，避免误收其他 AI 服务
   - RULE-SET,sciencedirect_domain,直连                  # ScienceDirect 直连
   - RULE-SET,elsevier_domain,直连                       # Elsevier 直连
   - RULE-SET,clarivate_domain,直连                      # Clarivate 直连
