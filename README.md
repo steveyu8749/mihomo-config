@@ -2,133 +2,168 @@
 
 [![Validate Mihomo template](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml/badge.svg)](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml)
 
-一份面向 **手机 / 电脑本机 TUN 使用场景** 的 Mihomo 配置模板。当前版本为 **V4.5**。核心原则是：TUN 负责接管，DNS 默认使用 Fake-IP，Rules 决定 DIRECT / PROXY，Real-IP 只保留给确实依赖真实 DNS 结果或可能绕过隧道的少数场景。
+一份面向 **手机 / 电脑本机 TUN 使用场景** 的 Mihomo 配置模板。当前版本为 **V4.6**。
+
+核心原则：**Fake-IP 是默认 DNS 语义，Rules 决定 DIRECT / PROXY；Sniffer 只辅助识别域名；公共域名分类使用 GeoSite，自定义与特殊规则继续使用 Rule Provider。**
 
 ## 设计基线
 
-- TUN 是主要系统级接管方式；`mixed-port`、`redir-port`、`tproxy-port` 作为额外入口保留。
-- RFC1918 私网、链路本地、组播和广播地址在 TUN 路由层绕过，优先保证局域网发现和设备互联。
-- `100.64.0.0/10` 是 RFC6598 Shared Address Space，仅作为可选 route exclude，不默认启用。
-- DNS 默认返回 Fake-IP；普通国内域名同样可以使用 Fake-IP，最终仍可由 `cn_domain` / `cn_ip` DIRECT。
-- `direct-nameserver: system` 保留给最终确定为 DIRECT 的真实目标解析。
-- Sniffer 只辅助恢复域名；TLS / QUIC 默认不改写目标，HTTP 单独允许覆盖。
-- OpenAI / ChatGPT、GitHub、YouTube 等具体服务规则必须位于包含它们的宽泛父集合之前。
-- Apple APNs 显式进入 `🍎 Apple`，默认直连；Android FCM 由 Google 规则覆盖。
+- TUN 作为跨客户端基线保留；RFC1918、链路本地、组播和广播地址在路由层绕过。
+- Clash Verge Rev 等 GUI 客户端可能对 TUN / DNS 做全局合并或覆写，排障时应查看客户端最终运行配置。
+- 不启用 `allow-lan`；本模板只面向本机使用，不向局域网其他设备开放代理端口。
+- DNS 使用 Fake-IP；Real-IP 仅保留私有域和少量明确兼容项。
+- 不启用 `respect-rules`：当前 DNS 上游为 AliDNS / DNSPod，本来就应直接访问，没有必要让 DoH 连接再进入 Routing Rules。
+- Sniffer 保留为域名识别兜底，但 HTTP / TLS / QUIC 均不使用嗅探结果覆盖原始目标。
+- 删除地区、fallback、url-test 策略组，节点完全手工选择；机场 Provider 健康检查继续保留。
+- 公共域名规则优先使用 `GEOSITE`；中国 IP 使用标准 `GEOIP,CN`；Google / Telegram / Netflix 服务 IP 继续使用独立 MRS。
 
-## 核心版本前提
+## 核心版本与 GeoData
 
-V4.5 的“普通域名默认 Fake-IP + DIRECT 时由 `direct-nameserver` 重解析”设计，依赖较新的 Mihomo DNS 行为。**建议使用 Mihomo Core v1.19.10 或更新版本**；从 v1.19.10 起，Fake-IP TUN 场景下 `direct-nameserver` 的重解析同样适用于 UDP。
+建议使用 **Mihomo Core v1.19.10 或更新版本**。V4.6 继续依赖 Fake-IP TUN 下 DIRECT 的 `direct-nameserver` 重解析行为。
 
-## 文件
+V4.6 使用 `GEOSITE`，因此客户端需要可用的 `geosite.dat`。配置本身不写 `geo-auto-update` / `geox-url`，GeoData 生命周期交给客户端管理；Clash Verge Rev 等客户端可直接更新 GeoData。
 
-- `config.example.yaml`：完整公开模板；真实订阅、Token、UUID、服务器地址和个人规则源均已脱敏。
-- `scripts/validate_config.py`：检查 YAML、引用关系、关键规则顺序、DNS 约束、公开模板脱敏与 Rule Provider URL。
-- `.github/workflows/validate.yml`：GitHub Actions 自动校验。
-- `CHANGELOG.md`：版本变更记录。
-- `docs/design-notes.md`：关键设计说明。
-
-## 使用方法
-
-```bash
-cp config.example.yaml config.yaml
-```
-
-然后替换模板中的订阅 URL / Token、VLESS `server` / `uuid` / `servername`，以及个人 ProxyLite 规则源。`config.yaml` 已被 `.gitignore` 忽略，不要强制提交真实配置。
+V4.6 **没有启用 `geodata-mode: true`**。该选项只决定 `GEOIP` 使用 DAT 还是 MMDB；本模板的 `GEOIP,CN` 继续使用默认 MMDB，而服务级 IP 集合继续使用 MRS，不要求全面切换到 `geoip.dat`。
 
 ## DNS / Fake-IP
 
-当前 `fake-ip-filter` 只保留两个 Rule Set 决策和最终兜底：
-
 ```yaml
 fake-ip-filter:
-  - RULE-SET,private_domain,real-ip
+  - GEOSITE,private,real-ip
   - RULE-SET,fakeip_compat,real-ip
   - MATCH,fake-ip
 ```
 
-其中：
+`fakeip_compat` 是本地 inline Rule Provider，目前只包含：
 
-- `private_domain` 使用 MetaCubeX 的私有域名规则，已覆盖 `.local`、`home.arpa` 等本地名称。
-- `fakeip_compat` 是本地 `inline` Rule Provider，不依赖网络下载，只集中保存少量确有兼容理由的域名：`dns.msftncsi.com`、`+.push.apple.com`、`+.market.xiaomi.com`。
-- `+.market.xiaomi.com` 参考常见 Mihomo Fake-IP 兼容列表加入，主要面向小米应用商店；它只改变 DNS 是否返回 Fake-IP，不直接决定 DIRECT / PROXY，也不等同于“小米互联”的局域网修复。
-- 其他普通域名统一由 `MATCH,fake-ip` 兜底，包括国内网站、国外网站、Google/FCM 与 NTP。
+```text
+dns.msftncsi.com
++.push.apple.com
++.market.xiaomi.com
+```
 
-**Fake-IP 不等于 PROXY，Real-IP 也不等于 DIRECT。** 例如国内域名仍可以：
+其中小米项只用于应用商店类 Fake-IP 兼容，不承担局域网“小米互联”修复。
+
+普通国内域名同样可以使用 Fake-IP：
 
 ```text
 DNS 返回 Fake-IP
 → TUN / Mihomo
-→ cn_domain 命中
+→ GEOSITE,cn 或 GEOIP,CN
 → 🎯 直连
 → direct-nameserver: system
 → DIRECT
 ```
 
+## `respect-rules` 为什么不启用
+
+`respect-rules` 控制的是 **DNS 上游连接本身是否遵守 Routing Rules**，不是“被查询域名应该用哪个 DNS”。当前 `nameserver` 是 AliDNS / DNSPod，目标就是直接访问，因此开启后通常仍会得到 DIRECT，但会额外引入 `proxy-server-nameserver` 与节点域名 bootstrap 依赖。
+
+如果以后把默认 DNS 改为必须通过代理访问的海外 DoH，再重新评估 `respect-rules`。
+
 ## Sniffer
 
-当前策略：
+V4.6 统一为“只识别，不改目标”：
 
-- `parse-pure-ip: true`
-- 全局 `override-destination: false`
-- HTTP 单独 `override-destination: true`
-- TLS / QUIC 主要用于识别域名
-- 只对微信、QQ、小米等已有兼容理由的域名跳过嗅探
+```yaml
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  override-destination: false
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+```
 
-APNs 不再单独加入 `skip-domain`：它的兼容重点是 Real-IP 与明确路由，而不是禁止 TLS 元数据识别。
+已有微信、QQ、小米 `skip-domain` 暂时保留，不继续扩大。后续如要删除，应单独做兼容性验证，不与其他架构调整同时进行。
+
+## 策略组
+
+V4.6 删除：
+
+- 香港 / 日本 / 美国地区组；
+- fallback 故障转移；
+- url-test 自动选择。
+
+只保留 `🚀 默认代理`、`🌐 全部节点`、各业务组、`🍎 Apple`、`🎯 直连` 和 `🐟 漏网之鱼`。`🌐 全部节点` 用于手工选择实际节点。
+
+机场 Proxy Provider 的健康检查仍保持启用，与删除自动策略组无冲突。
+
+## GeoSite + Rule Provider 混用
+
+V4.6 不采用“全 GeoData”或“全 MRS”任一极端方案。
+
+公共域名分类使用 GeoSite，例如：
+
+```yaml
+- GEOSITE,openai,🤖 ChatGPT
+- GEOSITE,github,👨🏿‍💻 GitHub
+- GEOSITE,youtube,📹 YouTube
+- GEOSITE,google,🍀 Google
+- GEOSITE,gfw,🚀 默认代理
+- GEOSITE,geolocation-!cn,🚀 默认代理
+- GEOSITE,cn,🎯 直连
+```
+
+Rule Provider 只保留：
+
+- `fakeip_compat`：本地兼容集；
+- `proxylite`：个人规则；
+- `adobeisdumb`：独立第三方规则；
+- `google_ip` / `telegram_ip` / `netflix_ip`：服务级 IP 集合。
+
+远程 Rule Provider 统一每 24 小时更新，并通过 `🚀 默认代理` 下载。
 
 ## Rules 顺序
 
-规则遵循“具体规则优先、包含范围更大的父集合靠后”：
+继续遵循“具体规则优先、父集合靠后”：
 
 ```text
 private / process
-→ service-specific
+→ specific services
 → ProxyLite / GFW
 → geolocation-!cn
-→ cn_domain
-→ IP fallback
+→ cn
+→ service IP fallback
+→ GEOIP,CN
 → MATCH
 ```
 
-特别注意：
+因此仍保持：
 
-- `onedrive_domain` 必须在 `microsoft_domain` 前。
-- `github_domain` 必须在 `microsoft_domain` 前，因为 Microsoft 上游集合包含 GitHub。
-- `youtube_domain` 必须在 `google_domain` 前，因为 Google 上游集合包含 YouTube。
-- `geolocation-!cn` 在 `cn_domain` 前，处理两个宽泛集合可能出现的交叉。
+```text
+onedrive → microsoft
+github   → microsoft
+youtube  → google
+geolocation-!cn → cn
+```
 
-## Apple / Android 推送
+APNs 仍显式位于 `apple-cn` 前：
 
-- iPhone / iPad 的 APNs 使用 `push.apple.com → 🍎 Apple`，默认选择 `直连`；DNS 保留真实 IP。
-- 不增加 `DST-PORT,5223,DIRECT`、Apple `17.0.0.0/8` 整段直连或额外 APNs Sniffer 端口。
-- Android FCM 继续由 `google_domain` / `google_ip` 进入 `🍀 Google`，不增加 5228–5230 端口规则。
-- 国内厂商推送不额外写死规则，由国内域名/IP规则自然 DIRECT。
-
-## Rule Provider
-
-V4.5 只调整 Rule Provider / Rule Set，不改变 TUN、Sniffer、端口、策略组或 DNS 上游。远程 Rule Provider 的更新周期统一为 `86400` 秒（24 小时）；规则下载仍通过 `♻️ 自动选择`，避免直接访问 GitHub Raw 在部分网络中不稳定。
-
-兼容性例外采用 `type: inline` 的 `fakeip_compat`，因此启动时不需要先下载第三方 Fake-IP 过滤列表，也避免整包引入 NTP、STUN、游戏、音乐、UU 加速器等与当前需求无关的 Real-IP 例外。
-
-同时删除独立的 `cnki_domain`：上游 `cn` 已包含 `geolocation-cn`，后者的学术分类包含 CNKI，因此继续保留单独 Provider 与规则只会重复同一个 `🎯 直连` 结果。
+```yaml
+- DOMAIN-SUFFIX,push.apple.com,🍎 Apple
+- GEOSITE,apple-cn,🍎 Apple
+```
 
 ## 自动校验
-
-完整校验：
 
 ```bash
 python -m pip install PyYAML
 python scripts/validate_config.py config.example.yaml
 ```
 
-离线环境跳过 Rule Provider URL 检查：
+离线环境：
 
 ```bash
 python scripts/validate_config.py config.example.yaml --skip-network
 ```
 
-校验脚本用于发现 YAML、引用、关键顺序、资源失效和脱敏问题，不等同于 Mihomo Core 的完整运行时验证。
+校验器会检查 YAML、引用关系、GeoSite 关键顺序、Sniffer 不覆盖目标、Fake-IP 约束、手动策略组结构、机场健康检查、Rule Provider 更新策略和公开模板脱敏。
 
 ## 维护原则
 
-不再为“看起来特殊”的服务预防性添加参数。新增 Fake-IP 例外、Sniffer skip、端口/IP 规则之前，应先确认问题能稳定复现，并且确实由对应机制导致。
+默认机制能解决的，不增加特殊规则。新增 Fake-IP 例外、Sniffer skip、端口/IP规则之前，应先确认问题能稳定复现并定位到具体机制。
