@@ -151,8 +151,10 @@ proxy-groups:                                             # 所有可在客户�
 # ==============================================================================
 # Mihomo 按从上到下顺序匹配，命中后停止继续匹配。V4.6 继续使用 MRS Rule Provider，不依赖 GEOSITE/GEOIP。
 rules:                                                    # 实际流量分流规则；从上到下首个命中生效
-  - PROCESS-NAME-REGEX,.*spotify.*,🎯 直连
-  - PROCESS-NAME,onedrive.exe,🎯 直连
+  - PROCESS-NAME-REGEX,.*spotify.*,直连
+  - PROCESS-NAME,onedrive.exe,直连
+  - PROCESS-NAME-REGEX,.*xboxone.*,🪟 Microsoft
+  - PROCESS-NAME,com.microsoft.bing,🪟 Microsoft
   
   - RULE-SET,private_domain,直连                           # 私有域名硬直连
   - RULE-SET,openai_domain,🤖 ChatGPT                     # OpenAI / ChatGPT 使用专用规则，避免误收其他 AI 服务
