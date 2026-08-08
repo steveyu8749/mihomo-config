@@ -8,6 +8,7 @@ on:
       - "README.md"
       - "CHANGELOG.md"
       - "docs/design-notes.md"
+      - "rules/**"
       - "scripts/validate_config.py"
       - "scripts/test_validator.py"
       - ".github/workflows/validate.yml"
@@ -17,6 +18,7 @@ on:
       - "README.md"
       - "CHANGELOG.md"
       - "docs/design-notes.md"
+      - "rules/**"
       - "scripts/validate_config.py"
       - "scripts/test_validator.py"
       - ".github/workflows/validate.yml"
@@ -104,4 +106,6 @@ jobs:
           set -euo pipefail
           workdir="${RUNNER_TEMP}/mihomo-config-test"
           mkdir -p "${workdir}"
+          "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/Direct.list" "${workdir}/Direct.mrs"
+          "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/FakeIPFilter.list" "${workdir}/FakeIPFilter.mrs"
           timeout 120s "${MIHOMO_BIN}" -t -d "${workdir}" -f "${GITHUB_WORKSPACE}/config.example.yaml"

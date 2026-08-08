@@ -1,0 +1,36 @@
+# 自维护直连域名集（behavior: domain, format: text）
+#
+# 收录标准：
+# 1. 已确认需要硬直连；
+# 2. 未被更合适的专用策略组处理；
+# 3. 不因“国内域名”这一宽泛理由重复收录 cn_domain 已覆盖的内容。
+#
+# 新增前请同时说明服务用途和直连原因。专用业务规则位于本列表之前，
+# 因此这里不会抢先覆盖 Google、Microsoft、Apple 等独立策略组。
+
+# ScienceDirect
++.sciencedirect.com
++.sciencedirectassets.com
+
+# Elsevier
++.cell.com
++.clinicalkey.com
++.els-cdn.com
++.elsevier-ae.com
++.elsevier.com
++.elsevier.io
++.engineeringvillage.com
++.evise.com
++.fundinginstitutional.com
++.knovel.com
++.mendeley.com
++.reaxys.com
++.scival.com
++.scopus.com
+
+# Clarivate / Web of Science
++.clarivate.com
++.isiknowledge.com
++.newisiknowledge.com
++.webofknowledge.com
++.webofscience.com

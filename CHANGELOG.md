@@ -1,5 +1,13 @@
 # Changelog
 
+## V4.8
+
+- 新增仓库自维护的 `rules/Direct.list`，以一个 domain text Provider 统一承载硬直连例外；初始内容合并 ScienceDirect、Elsevier、Clarivate / Web of Science 三个科研集合，以一个下载入口和一条路由规则替代原来的三个入口。
+- 新增严格最小化的 `rules/FakeIPFilter.list`，Provider 名继续使用 `fakeip_compat`；仅保留 Windows NCSI、Google Play、Apple APNs 与小米系统服务等已知 Fake-IP 兼容项。
+- 为 Google Play 增加 `+.services.googleapis.cn` 与 `+.xn--ngstr-lra8j.com` Real-IP 例外；DNS 返回方式改变，但最终 DIRECT / PROXY 仍由路由规则决定。
+- 自维护 Direct 位于全部专用业务域名之后、ProxyLite 和宽泛地域规则之前，避免用户例外遮蔽 Google、Microsoft、Apple 等独立策略组。
+- CI 和仓库校验器同步检查两个文本规则集的格式、去重、必要条目、Provider URL、文档说明和 Mihomo 核心转换结果。
+
 ## V4.7
 
 - 重新按 Mihomo v1.19.29 官方文档和核心实现审查全部配置；TUN、Fake-IP、Sniffer、策略组与 OneDrive 特殊分流的总体设计保持不变。

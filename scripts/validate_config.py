@@ -12,7 +12,7 @@ from yaml.nodes import MappingNode
 from yaml.resolver import BaseResolver
 
 
-TEMPLATE_VERSION = "V4.7"
+TEMPLATE_VERSION = "V4.8"
 PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 DEFAULT_PROXY = "🚀 默认代理"
 HARD_DIRECT = "直连"
@@ -77,9 +77,6 @@ DOMAIN_PROVIDER_PATHS = {
     "gfw_domain": "gfw.mrs",
     "geolocation-!cn": "geolocation-!cn.mrs",
     "cn_domain": "cn.mrs",
-    "sciencedirect_domain": "sciencedirect.mrs",
-    "elsevier_domain": "elsevier.mrs",
-    "clarivate_domain": "clarivate.mrs",
     "bing_domain": "bing.mrs",
     "msn_domain": "msn.mrs",
     "xbox_domain": "xbox.mrs",
@@ -94,10 +91,41 @@ IP_PROVIDER_PATHS = {
     "apple_ip": "geo-lite/geoip/apple.mrs",
 }
 
+CUSTOM_DOMAIN_PROVIDER_PATHS = {
+    "direct_domain": "rules/Direct.list",
+    "fakeip_compat": "rules/FakeIPFilter.list",
+}
+
 REQUIRED_FAKEIP_COMPAT = {
     "dns.msftncsi.com",
+    "+.services.googleapis.cn",
+    "+.xn--ngstr-lra8j.com",
     "+.push.apple.com",
     "+.market.xiaomi.com",
+}
+
+REQUIRED_DIRECT_DOMAINS = {
+    "+.sciencedirect.com",
+    "+.sciencedirectassets.com",
+    "+.cell.com",
+    "+.clinicalkey.com",
+    "+.els-cdn.com",
+    "+.elsevier-ae.com",
+    "+.elsevier.com",
+    "+.elsevier.io",
+    "+.engineeringvillage.com",
+    "+.evise.com",
+    "+.fundinginstitutional.com",
+    "+.knovel.com",
+    "+.mendeley.com",
+    "+.reaxys.com",
+    "+.scival.com",
+    "+.scopus.com",
+    "+.clarivate.com",
+    "+.isiknowledge.com",
+    "+.newisiknowledge.com",
+    "+.webofknowledge.com",
+    "+.webofscience.com",
 }
 
 REQUIRED_RULES = {
@@ -108,9 +136,7 @@ REQUIRED_RULES = {
     "PROCESS-NAME-REGEX,.*xboxone.*,🪟 Microsoft",
     "PROCESS-NAME,com.microsoft.bing,🪟 Microsoft",
     "RULE-SET,ai_domain,🤖 ChatGPT",
-    "RULE-SET,sciencedirect_domain,直连",
-    "RULE-SET,elsevier_domain,直连",
-    "RULE-SET,clarivate_domain,直连",
+    "RULE-SET,direct_domain,直连",
     "RULE-SET,bing_domain,🪟 Microsoft",
     "RULE-SET,msn_domain,🪟 Microsoft",
     "RULE-SET,xbox_domain,🪟 Microsoft",
@@ -150,9 +176,6 @@ RULE_ORDER = [
 
 SPECIAL_RULES_BEFORE_PROXYLITE = [
     "RULE-SET,ai_domain,",
-    "RULE-SET,sciencedirect_domain,",
-    "RULE-SET,elsevier_domain,",
-    "RULE-SET,clarivate_domain,",
     "RULE-SET,bing_domain,",
     "RULE-SET,msn_domain,",
     "RULE-SET,xbox_domain,",
@@ -168,6 +191,13 @@ SPECIAL_RULES_BEFORE_PROXYLITE = [
     "RULE-SET,telegram_domain,",
     "RULE-SET,netflix_domain,",
     "RULE-SET,paypal_domain,",
+    "RULE-SET,direct_domain,",
+]
+
+DEDICATED_RULES_BEFORE_DIRECT = [
+    prefix
+    for prefix in SPECIAL_RULES_BEFORE_PROXYLITE
+    if prefix != "RULE-SET,direct_domain,"
 ]
 
 GEODATA_KEYS = {
@@ -327,6 +357,10 @@ def expected_rule_provider_url(name: str) -> str:
     )
 
 
+def expected_custom_provider_url(path: str) -> str:
+    return f"https://raw.githubusercontent.com/steveyu8749/mihomo-config/main/{path}"
+
+
 def validate_provider_shape(
     name: str,
     provider: dict[str, Any],
@@ -370,17 +404,23 @@ def validate_rule_providers(
             name, provider, "ipcidr", expected_rule_provider_url(name), errors
         )
 
-    compat = providers.get("fakeip_compat")
-    if not isinstance(compat, dict):
-        fail(errors, "missing inline fakeip_compat rule-provider")
-    else:
-        if compat.get("type") != "inline" or compat.get("behavior") != "domain":
-            fail(errors, "fakeip_compat must remain type:inline with behavior:domain")
-        payload = compat.get("payload")
-        if not isinstance(payload, list):
-            fail(errors, "fakeip_compat.payload must be a list")
-        elif set(item for item in payload if isinstance(item, str)) != REQUIRED_FAKEIP_COMPAT:
-            fail(errors, "fakeip_compat must contain exactly the three audited compatibility entries")
+    for name, path in CUSTOM_DOMAIN_PROVIDER_PATHS.items():
+        provider = providers.get(name)
+        if not isinstance(provider, dict):
+            fail(errors, f"missing maintained domain text rule-provider: {name}")
+            continue
+        expected = {
+            "type": "http",
+            "interval": 86400,
+            "behavior": "domain",
+            "format": "text",
+            "url": expected_custom_provider_url(path),
+        }
+        for key, value in expected.items():
+            if provider.get(key) != value:
+                fail(errors, f"rule-provider {name!r} must use {key}: {value!r}")
+        if "proxy" in provider:
+            fail(errors, f"rule-provider {name!r} must not force a fixed download proxy")
 
     proxylite = providers.get("proxylite")
     if proxylite is not None:
@@ -412,6 +452,64 @@ def validate_rule_providers(
     for label, pattern in adobe_comment_patterns.items():
         if re.search(pattern, raw) is None:
             fail(errors, f"missing commented desktop-only activation point: {label}")
+
+
+def read_domain_text_rules(path: Path, label: str, errors: list[str]) -> list[str]:
+    if not path.is_file():
+        fail(errors, f"repository rule file missing: {path.as_posix()}")
+        return []
+
+    rules: list[str] = []
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), 1
+    ):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line != line.lower():
+            fail(errors, f"{label}:{line_number} domain rule must be lowercase: {line!r}")
+        if any(character.isspace() for character in line) or "," in line or "://" in line:
+            fail(errors, f"{label}:{line_number} is not a domain behavior text rule: {line!r}")
+            continue
+        domain = line[2:] if line.startswith(("+.", "*.")) else line
+        if (
+            not domain
+            or domain.startswith(".")
+            or domain.endswith(".")
+            or ".." in domain
+            or re.fullmatch(r"[a-z0-9*_-]+(?:\.[a-z0-9*_-]+)+", domain) is None
+        ):
+            fail(errors, f"{label}:{line_number} has an invalid domain pattern: {line!r}")
+            continue
+        rules.append(line)
+
+    duplicates = sorted({rule for rule in rules if rules.count(rule) > 1})
+    if duplicates:
+        fail(errors, f"{label} contains duplicate domain rules: {', '.join(duplicates)}")
+    return rules
+
+
+def validate_maintained_rule_files(root: Path, errors: list[str]) -> None:
+    direct_path = root / CUSTOM_DOMAIN_PROVIDER_PATHS["direct_domain"]
+    fakeip_path = root / CUSTOM_DOMAIN_PROVIDER_PATHS["fakeip_compat"]
+    direct_rules = read_domain_text_rules(direct_path, "rules/Direct.list", errors)
+    fakeip_rules = read_domain_text_rules(fakeip_path, "rules/FakeIPFilter.list", errors)
+
+    missing_direct = REQUIRED_DIRECT_DOMAINS - set(direct_rules)
+    if missing_direct:
+        fail(
+            errors,
+            "rules/Direct.list is missing audited research domains: "
+            + ", ".join(sorted(missing_direct)),
+        )
+
+    if set(fakeip_rules) != REQUIRED_FAKEIP_COMPAT or len(fakeip_rules) != len(
+        REQUIRED_FAKEIP_COMPAT
+    ):
+        fail(
+            errors,
+            "rules/FakeIPFilter.list must contain exactly the five audited compatibility entries",
+        )
 
 
 def validate_proxy_providers(
@@ -608,6 +706,13 @@ def validate_rules(
             broad_index = find_rule(rules, prefix)
             if broad_index is not None and proxylite_index > broad_index:
                 fail(errors, f"proxylite must appear before broad rule {prefix!r}")
+
+    direct_index = find_rule(rules, "RULE-SET,direct_domain,")
+    if direct_index is not None:
+        for prefix in DEDICATED_RULES_BEFORE_DIRECT:
+            dedicated_index = find_rule(rules, prefix)
+            if dedicated_index is not None and dedicated_index > direct_index:
+                fail(errors, f"dedicated service rule {prefix!r} must appear before direct_domain")
 
     cn_domain_index = find_rule(rules, "RULE-SET,cn_domain,")
     apple_ip_index = find_rule(rules, "RULE-SET,apple_ip,")
@@ -817,6 +922,8 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
         "CHANGELOG.md": root / "CHANGELOG.md",
         "docs/design-notes.md": root / "docs/design-notes.md",
         ".github/workflows/validate.yml": root / ".github/workflows/validate.yml",
+        "rules/Direct.list": root / "rules/Direct.list",
+        "rules/FakeIPFilter.list": root / "rules/FakeIPFilter.list",
     }
     if not (root / "README.md").is_file():
         return
@@ -830,6 +937,8 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
     design = required_files["docs/design-notes.md"].read_text(encoding="utf-8")
     workflow = required_files[".github/workflows/validate.yml"].read_text(encoding="utf-8")
 
+    validate_maintained_rule_files(root, errors)
+
     if TEMPLATE_VERSION not in readme:
         fail(errors, f"README must identify the current template as {TEMPLATE_VERSION}")
     if TEMPLATE_VERSION not in design:
@@ -842,6 +951,8 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
         "cache-algorithm": "DNS cache algorithm decision",
         "ProxyLite": "ProxyLite priority",
         "respect-rules": "DNS upstream routing",
+        "Direct.list": "maintained direct-domain list",
+        "FakeIPFilter.list": "maintained Fake-IP compatibility list",
     }
     for text, topic in required_readme_topics.items():
         if text not in readme:
@@ -854,7 +965,7 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
         fail(errors, "README and workflow disagree about the pinned Mihomo version")
     if "PyYAML==6.0.3" not in workflow:
         fail(errors, "workflow must pin the PyYAML validator dependency")
-    for changed_path in ("README.md", "CHANGELOG.md", "docs/design-notes.md"):
+    for changed_path in ("README.md", "CHANGELOG.md", "docs/design-notes.md", "rules/**"):
         if workflow.count(f'"{changed_path}"') < 2:
             fail(errors, f"workflow path filters must validate changes to {changed_path}")
 
@@ -903,10 +1014,11 @@ def main() -> int:
     expected_anchor_shapes = {
         "ip": {"type": "http", "interval": 86400, "behavior": "ipcidr", "format": "mrs"},
         "domain": {"type": "http", "interval": 86400, "behavior": "domain", "format": "mrs"},
+        "domaintxt": {"type": "http", "interval": 86400, "behavior": "domain", "format": "text"},
         "class": {"type": "http", "interval": 86400, "behavior": "classical", "format": "text"},
     }
     if anchors != expected_anchor_shapes:
-        fail(errors, "rule-anchor must contain exactly the audited ip, domain and class templates")
+        fail(errors, "rule-anchor must contain exactly the audited ip, domain, domaintxt and class templates")
 
     validate_proxy_providers(proxy_providers, errors)
     validate_rule_providers(providers, raw, errors)

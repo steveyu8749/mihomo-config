@@ -1,0 +1,18 @@
+# 自维护 Fake-IP 兼容集（behavior: domain, format: text）
+#
+# 这里只收录“应用收到 Fake-IP 后会出现可复现功能故障”的域名。
+# 普通国内外域名、仅需改变 DIRECT/PROXY 的域名，以及未经验证的预防性条目均不收录。
+# 新增条目时应同步 README、设计说明和校验器中的理由记录。
+
+# Windows NCSI：DNS 探测需要取得预期的真实 A 记录。
+dns.msftncsi.com
+
+# Google Play：部分 Android/国行环境在 Fake-IP 下会出现下载等待或 CDN 选择异常。
++.services.googleapis.cn
++.xn--ngstr-lra8j.com
+
+# Apple APNs：系统推送连接可能绕过 VPN/TUN，需要可直接使用的真实目标地址。
++.push.apple.com
+
+# 小米系统服务：已知应用商店/天气等组件在 Fake-IP 下可能无法正常工作。
++.market.xiaomi.com

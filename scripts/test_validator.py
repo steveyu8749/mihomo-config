@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -41,6 +42,23 @@ def move_proxylite_before_bing(text: str) -> str:
     return "".join(lines)
 
 
+def move_direct_before_bing(text: str) -> str:
+    lines = text.splitlines(keepends=True)
+    direct_index = next(
+        index
+        for index, line in enumerate(lines)
+        if line.lstrip().startswith("- RULE-SET,direct_domain,")
+    )
+    direct_line = lines.pop(direct_index)
+    bing_index = next(
+        index
+        for index, line in enumerate(lines)
+        if line.lstrip().startswith("- RULE-SET,bing_domain,")
+    )
+    lines.insert(bing_index, direct_line)
+    return "".join(lines)
+
+
 def remove_bing_provider(text: str) -> str:
     lines = [
         line
@@ -68,20 +86,34 @@ def remove_mode_comment(text: str) -> str:
     return replace_once(text, old, "mode: rule")
 
 
-TEST_CASES: list[tuple[str, Callable[[str], str], str]] = [
-    ("duplicate YAML key", add_duplicate_mode, "found duplicate key 'mode'"),
+TEST_CASES: list[tuple[str, str, Callable[[str], str], str]] = [
+    (
+        "duplicate YAML key",
+        "config.example.yaml",
+        add_duplicate_mode,
+        "found duplicate key 'mode'",
+    ),
     (
         "ProxyLite shadows a dedicated service",
+        "config.example.yaml",
         move_proxylite_before_bing,
         "must appear before proxylite",
     ),
     (
+        "Direct shadows a dedicated service",
+        "config.example.yaml",
+        move_direct_before_bing,
+        "must appear before direct_domain",
+    ),
+    (
         "missing referenced provider",
+        "config.example.yaml",
         remove_bing_provider,
         "missing domain MRS rule-provider: bing_domain",
     ),
     (
         "unknown rule target",
+        "config.example.yaml",
         lambda text: replace_once(
             text,
             "RULE-SET,onedrive_domain,🐬 OneDrive",
@@ -91,16 +123,19 @@ TEST_CASES: list[tuple[str, Callable[[str], str], str]] = [
     ),
     (
         "protocol-local destination override",
+        "config.example.yaml",
         add_protocol_override,
         "sniffer protocol TLS must not override destination",
     ),
     (
         "invalid process regex",
+        "config.example.yaml",
         lambda text: replace_once(text, ".*spotify.*", "(*spotify"),
         "invalid process regex",
     ),
     (
         "domain rule with no-resolve",
+        "config.example.yaml",
         lambda text: replace_once(
             text,
             "RULE-SET,bing_domain,🪟 Microsoft",
@@ -110,6 +145,7 @@ TEST_CASES: list[tuple[str, Callable[[str], str], str]] = [
     ),
     (
         "live subscription URL",
+        "config.example.yaml",
         lambda text: replace_first(
             text,
             'url: "订阅url"',
@@ -119,8 +155,21 @@ TEST_CASES: list[tuple[str, Callable[[str], str], str]] = [
     ),
     (
         "missing field comment",
+        "config.example.yaml",
         remove_mode_comment,
         "active config lines missing explanatory comments",
+    ),
+    (
+        "missing audited Fake-IP exception",
+        "rules/FakeIPFilter.list",
+        lambda text: replace_once(text, "+.services.googleapis.cn\n", ""),
+        "must contain exactly the five audited compatibility entries",
+    ),
+    (
+        "classical syntax in domain text list",
+        "rules/Direct.list",
+        lambda text: text + "\nDOMAIN-SUFFIX,example.com\n",
+        "is not a domain behavior text rule",
     ),
 ]
 
@@ -142,14 +191,21 @@ def main() -> int:
         print(baseline.stdout + baseline.stderr)
         return 1
 
-    source = CONFIG.read_text(encoding="utf-8")
     failures: list[str] = []
     with tempfile.TemporaryDirectory(prefix="mihomo-validator-tests-") as directory:
         temp_root = Path(directory)
-        for index, (name, mutate, expected_message) in enumerate(TEST_CASES):
-            candidate = temp_root / f"case-{index}.yaml"
-            candidate.write_text(mutate(source), encoding="utf-8")
-            result = run_validator(candidate)
+        for index, (name, target, mutate, expected_message) in enumerate(TEST_CASES):
+            case_root = temp_root / f"case-{index}"
+            shutil.copytree(
+                ROOT,
+                case_root,
+                ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc"),
+            )
+            target_path = case_root / target
+            target_path.write_text(
+                mutate(target_path.read_text(encoding="utf-8")), encoding="utf-8"
+            )
+            result = run_validator(case_root / "config.example.yaml")
             output = result.stdout + result.stderr
             if result.returncode == 0:
                 failures.append(f"{name}: validator incorrectly accepted the mutation")

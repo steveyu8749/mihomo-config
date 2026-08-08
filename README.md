@@ -2,7 +2,7 @@
 
 [![Validate Mihomo template](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml/badge.svg)](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml)
 
-一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.7**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
+一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.8**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
 
 这不是机场订阅转换模板，也不是自动测速方案。节点由用户手工选择，配置专注于分流语义和跨客户端一致性。
 
@@ -14,7 +14,7 @@
 | DNS | 国内 DoH + Fake-IP | 降低污染影响，同时保留少量 Real-IP 兼容项 |
 | TUN | `stack: mixed` | 兼顾桌面与移动端的兼容性 |
 | Sniffer | 识别域名，不覆盖目标 | 补足少数缺失域名的连接信息，不改变实际连接地址 |
-| 规则数据 | 独立 MRS Rule Provider | 不依赖客户端内置 GeoData 的版本和标签 |
+| 规则数据 | 公共 MRS + 自维护文本 Provider | 不依赖客户端内置 GeoData，并让个人例外保持可审计 |
 | 节点选择 | 手工 `select` | 不维护地区筛选、自动测速或故障转移组 |
 | 使用边界 | 仅本机，`allow-lan: false` | 不把代理端口暴露给局域网其他设备 |
 
@@ -43,10 +43,11 @@ Fake-IP / Real-IP 只决定 DNS 返回什么地址；DIRECT / PROXY 只由 `rule
 
 1. 下载 [`config.example.yaml`](./config.example.yaml)。
 2. 将 `Provider_A`、`Provider_B`、`Provider_C` 中的 `订阅url` 替换为自己的订阅地址；不需要的 Provider 可以删除。
-3. 处理 `proxylite`：有自定义规则就替换占位地址；没有就同时删除对应路由规则与 Rule Provider。
-4. 将配置导入客户端并启用 TUN。
-5. 在 `🚀 默认代理` 中选择一个实际代理节点；其他业务组默认继承它，也可以单独切换为硬直连。
-6. 查看客户端的最终配置，确认没有被全局覆写脚本改掉 DNS、TUN 或策略组设置。
+3. 按需维护 [`rules/Direct.list`](./rules/Direct.list) 与 [`rules/FakeIPFilter.list`](./rules/FakeIPFilter.list)；不需要个人扩展时直接使用仓库默认内容。
+4. 处理 `proxylite`：有自定义规则就替换占位地址；没有就同时删除对应路由规则与 Rule Provider。
+5. 将配置导入客户端并启用 TUN。
+6. 在 `🚀 默认代理` 中选择一个实际代理节点；其他业务组默认继承它，也可以单独切换为硬直连。
+7. 查看客户端的最终配置，确认没有被全局覆写脚本改掉 DNS、TUN 或策略组设置。
 
 请勿把真实订阅地址、节点凭据、API 密钥或控制器密码提交到公开仓库。仓库策略校验会拦截常见的未脱敏内容，但不能代替人工确认。
 
@@ -146,15 +147,19 @@ fake-ip-filter:
 | `fakeip_compat -> real-ip` | 少量经过确认的兼容项返回真实地址 |
 | `MATCH -> fake-ip` | 其余域名，包括普通国内域名，统一返回 Fake-IP |
 
-`fakeip_compat` 当前只包含：
+`fakeip_compat` 由 [`rules/FakeIPFilter.list`](./rules/FakeIPFilter.list) 维护，当前只包含：
 
 ```text
 dns.msftncsi.com
++.services.googleapis.cn
++.xn--ngstr-lra8j.com
 +.push.apple.com
 +.market.xiaomi.com
 ```
 
-暂时不增加 NTP、STUN、游戏或整类厂商域名。只有出现可稳定复现、并确认由 Fake-IP 导致的问题时，才加入最小范围的例外。
+其中两个 Google 条目用于处理部分 Android / 国行环境下 Google Play 下载等待或 CDN 选择异常；相关兼容现象可参考 [OpenWrt-nikki #278](https://github.com/nikkinikki-org/OpenWrt-nikki/discussions/278) 与 [gfwlist #2255](https://github.com/gfwlist/gfwlist/issues/2255)。它们返回真实 IP 后仍由 `google_domain`、`google_ip` 和后续规则决定出口，不会因为进入 Fake-IP Filter 就自动直连。
+
+暂时不增加 NTP、STUN、游戏、普通国内外域名或整类厂商集合。只有出现可稳定复现、并确认根因是“应用收到 Fake-IP”而不是路由出口错误时，才加入最小范围的例外。列表中每项必须有明确故障机制；为了心理保险而加入的条目不接受。
 
 Real-IP 例外不决定出口。例如 `push.apple.com` 返回真实 IP 后，实际连接仍会命中 `🍎 Apple` 规则。
 
@@ -180,7 +185,7 @@ MetaCubeX 的 `private.mrs` 包含 `198.18.0.0/15`，而默认 Fake-IP 池 `198.
 
 ### `cache-algorithm`
 
-Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.7 不显式设置 `cache-algorithm`，继续使用默认 LRU。
+Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.8 不显式设置 `cache-algorithm`，继续使用默认 LRU。
 
 ARC 并不等于无条件更快。没有观测到 DNS 缓存频繁抖动、也没有针对设备内存与访问模式做测量时，增加该参数只会扩大配置变量，难以证明实际收益。如果以后有明确的缓存命中问题，可以单独测试：
 
@@ -205,16 +210,17 @@ HTTP Host、TLS SNI 与 QUIC 握手信息只用于补充域名识别和规则匹
 
 ## 分流规则
 
-Mihomo 从上到下匹配，命中后停止。V4.7 的顺序是：
+Mihomo 从上到下匹配，命中后停止。V4.8 的顺序是：
 
 1. 私有域名与私有 IP；
 2. 进程规则；
-3. 学术与具体业务域名；
-4. 自定义 ProxyLite；
-5. GFW、非中国与中国域名；
-6. 业务 IP 兜底；
-7. 中国 IP 兜底；
-8. `MATCH`。
+3. 具体业务域名；
+4. 自维护 Direct；
+5. 自定义 ProxyLite；
+6. GFW、非中国与中国域名；
+7. 业务 IP 兜底；
+8. 中国 IP 兜底；
+9. `MATCH`。
 
 ### 专用规则必须优先
 
@@ -227,6 +233,18 @@ Mihomo 从上到下匹配，命中后停止。V4.7 的顺序是：
 | 非中国域名 | 中国域名 | 避免交叉集合先被直连命中 |
 
 ProxyLite 位于所有专用业务域名之后、GFW / 地域规则之前。自定义规则集的内容由用户维护，范围可能很宽；如果它放在前面，可能抢先命中 Bing、OneDrive、GitHub、Microsoft、Apple 等域名，使专用策略组失效。
+
+### 自维护 Direct
+
+[`rules/Direct.list`](./rules/Direct.list) 使用 `behavior: domain` 与 `format: text`。初始 21 条规则合并了原来的 ScienceDirect、Elsevier、Clarivate / Web of Science 三个 Provider，因此主配置只保留一个下载入口和一条路由规则：
+
+```yaml
+- RULE-SET,direct_domain,直连
+```
+
+它位于全部专用业务规则之后、ProxyLite 与宽泛地域规则之前。这样新增的普通直连例外会优先于 ProxyLite，但不会抢走 Google、Microsoft、Apple、OneDrive 等已经明确分组的服务。
+
+不要把完整 `cn_domain`、`cn_ip` 已覆盖的内容复制进来。只有明确要求硬直连、现有 Provider 没有正确处理的域名才应加入；如果一个域名需要独立策略组，就不应放进 Direct。
 
 ### AI 聚合集合
 
@@ -303,14 +321,15 @@ PROCESS-NAME-REGEX,正则表达式,目标策略组
 | --- | --- |
 | 公共域名集合 | `behavior: domain` + `format: mrs` |
 | 服务 / 中国 IP | `behavior: ipcidr` + `format: mrs` |
+| 自维护 Direct | `behavior: domain` + `format: text` |
 | 自定义 ProxyLite | `behavior: classical` + `format: text` |
-| Fake-IP 兼容集合 | 本地 `type: inline` |
+| Fake-IP 兼容集合 | `behavior: domain` + `format: text` |
 
 HTTP Rule Provider 每 24 小时更新。模板没有给它们设置 `proxy`，因此不会强制固定 DIRECT 或某个代理组；更新请求作为 Mihomo 内部连接进入正常路由。已有规则数据时，下载域名会按当前规则选择出口；首次启动或缓存为空时，最终结果也会受当时已可用的规则与兜底策略影响。
 
 这与 Proxy Provider 不同：机场订阅需要先提供代理节点，所以模板为它明确设置硬直连，避免循环依赖。
 
-所有启用的 MetaCubeX MRS URL 已在本次 V4.7 复审中检查存在性，格式与声明的 `behavior` 一致。
+所有启用的 MetaCubeX MRS URL 已在本次 V4.8 复审中检查存在性，格式与声明的 `behavior` 一致；两个自维护文本列表会在 CI 中额外转换为 MRS，以验证 Mihomo 能实际解析。
 
 ## Adobe：默认完全关闭
 
@@ -359,6 +378,7 @@ python3 scripts/validate_config.py config.example.yaml
 - YAML 重复键、顶层字段与公开模板脱敏；
 - 策略组、规则目标和 Rule Provider 引用完整性；
 - MRS Provider 的类型、格式、URL 与更新周期；
+- 自维护 Direct / Fake-IP 文本列表的语法、重复项和必要条目；
 - ProxyLite、Microsoft、Google、Apple 和 IP 兜底的关键顺序；
 - DNS、TUN、Sniffer 与进程正则约束；
 - 配置中每个活动字段是否带说明注释；
@@ -378,6 +398,8 @@ GitHub Actions 会运行相同的仓库策略校验，并下载经过 GitHub 发
 | 文件 | 作用 |
 | --- | --- |
 | [`config.example.yaml`](./config.example.yaml) | 公开、脱敏、逐字段注释的主配置模板 |
+| [`rules/Direct.list`](./rules/Direct.list) | 明确需要硬直连的最小域名例外，含合并后的科研资源 |
+| [`rules/FakeIPFilter.list`](./rules/FakeIPFilter.list) | 仅解决应用无法接受 Fake-IP 的 Real-IP 兼容项 |
 | [`scripts/validate_config.py`](./scripts/validate_config.py) | 仓库设计约束、引用完整性和脱敏检查 |
 | [`scripts/test_validator.py`](./scripts/test_validator.py) | 校验器故障注入与回归测试 |
 | [`.github/workflows/validate.yml`](./.github/workflows/validate.yml) | GitHub Actions 自动校验 |
@@ -386,13 +408,15 @@ GitHub Actions 会运行相同的仓库策略校验，并下载经过 GitHub 发
 
 ## 维护原则
 
-新增 Fake-IP 例外、Sniffer 跳过项、进程规则或独立服务分类前，先确认：
+新增 Direct、Fake-IP 例外、Sniffer 跳过项、进程规则或独立服务分类前，先确认：
 
 1. 问题可以稳定复现；
 2. 能定位到具体机制；
 3. 例外范围可以缩到足够小；
 4. 新规则不会被更靠前的规则遮蔽；
 5. 配置、校验器、README 与设计说明已同步更新。
+
+Direct 与 Fake-IP 的准入原因不同：Direct 解决“出口必须硬直连”，Fake-IP Filter 解决“应用必须拿到真实 IP”。一个域名只是应该直连，并不构成加入 Fake-IP Filter 的理由；普通国内外域名只要 Fake-IP 下功能正常，就继续使用 Fake-IP。
 
 默认机制能够正确处理的问题，不继续堆叠特殊参数。
 
