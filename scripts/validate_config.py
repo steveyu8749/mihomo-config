@@ -15,10 +15,7 @@ BUILTIN_TARGETS = {"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"}
 FAKE_IP_RESULTS = {"real-ip", "fake-ip"}
 REQUIRED_REAL_IP_FILTERS = {
     "RULE-SET,private_domain,real-ip",
-    "DOMAIN-SUFFIX,local,real-ip",
-    "DOMAIN-SUFFIX,home.arpa,real-ip",
-    "DOMAIN-SUFFIX,msftconnecttest.com,real-ip",
-    "DOMAIN-SUFFIX,msftncsi.com,real-ip",
+    "DOMAIN,dns.msftncsi.com,real-ip",
     "DOMAIN-SUFFIX,push.apple.com,real-ip",
 }
 
@@ -35,17 +32,12 @@ def is_placeholder_url(url: str) -> bool:
 def check_url(url: str, timeout: float = 15.0) -> tuple[bool, str]:
     request = urllib.request.Request(
         url,
-        headers={
-            "User-Agent": "mihomo-config-validator/1.0",
-            "Range": "bytes=0-0",
-        },
+        headers={"User-Agent": "mihomo-config-validator/1.0", "Range": "bytes=0-0"},
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             code = getattr(response, "status", 200)
-            if 200 <= code < 400:
-                return True, str(code)
-            return False, f"HTTP {code}"
+            return (200 <= code < 400, str(code) if 200 <= code < 400 else f"HTTP {code}")
     except urllib.error.HTTPError as exc:
         return False, f"HTTP {exc.code}"
     except urllib.error.URLError as exc:
@@ -64,28 +56,21 @@ def rule_index(rules: list[str], prefix: str) -> int | None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate the public Mihomo template")
     parser.add_argument("config", nargs="?", default="config.example.yaml")
-    parser.add_argument(
-        "--skip-network",
-        action="store_true",
-        help="skip remote Rule Provider URL reachability checks",
-    )
+    parser.add_argument("--skip-network", action="store_true", help="skip remote Rule Provider URL reachability checks")
     args = parser.parse_args()
 
     path = Path(args.config)
     errors: list[str] = []
-
     if not path.is_file():
         print(f"ERROR: config not found: {path}")
         return 2
 
     raw = path.read_text(encoding="utf-8")
-
     try:
         data = yaml.safe_load(raw)
     except yaml.YAMLError as exc:
         print(f"ERROR: YAML parse failed: {exc}")
         return 1
-
     if not isinstance(data, dict):
         print("ERROR: YAML root must be a mapping")
         return 1
@@ -95,16 +80,8 @@ def main() -> int:
     providers = data.get("rule-providers") or {}
     rules = data.get("rules") or []
 
-    proxy_names = {
-        item.get("name")
-        for item in proxies
-        if isinstance(item, dict) and isinstance(item.get("name"), str)
-    }
-    group_names = {
-        item.get("name")
-        for item in groups
-        if isinstance(item, dict) and isinstance(item.get("name"), str)
-    }
+    proxy_names = {item.get("name") for item in proxies if isinstance(item, dict) and isinstance(item.get("name"), str)}
+    group_names = {item.get("name") for item in groups if isinstance(item, dict) and isinstance(item.get("name"), str)}
     provider_names = set(providers) if isinstance(providers, dict) else set()
     valid_targets = proxy_names | group_names | BUILTIN_TARGETS
 
@@ -122,9 +99,7 @@ def main() -> int:
             fail(errors, f"rule #{index} is not a string: {rule!r}")
             continue
         parts = [part.strip() for part in rule.split(",")]
-        if not parts:
-            continue
-        kind = parts[0]
+        kind = parts[0] if parts else ""
         if kind == "MATCH":
             if len(parts) < 2:
                 fail(errors, f"rule #{index} MATCH has no target")
@@ -137,7 +112,6 @@ def main() -> int:
             if kind == "RULE-SET" and parts[1] not in provider_names:
                 fail(errors, f"rule #{index} references missing rule-provider {parts[1]!r}")
             target = parts[2]
-
         if target not in valid_targets:
             fail(errors, f"rule #{index} references missing target {target!r}")
 
@@ -155,11 +129,15 @@ def main() -> int:
             if parts[2] not in FAKE_IP_RESULTS:
                 fail(errors, f"fake-ip-filter #{index} has invalid result {parts[2]!r}")
 
-    # Routing keeps explicit non-CN domains ahead of the broad CN set.
     geo_rule = rule_index(rules, "RULE-SET,geolocation-!cn,")
     cn_rule = rule_index(rules, "RULE-SET,cn_domain,")
     if geo_rule is not None and cn_rule is not None and geo_rule > cn_rule:
         fail(errors, "geolocation-!cn must appear before cn_domain in routing rules")
+
+    github_rule = rule_index(rules, "RULE-SET,github_domain,")
+    microsoft_rule = rule_index(rules, "RULE-SET,microsoft_domain,")
+    if github_rule is not None and microsoft_rule is not None and github_rule > microsoft_rule:
+        fail(errors, "github_domain must appear before microsoft_domain because microsoft includes github")
 
     if not rules or not isinstance(rules[-1], str) or not rules[-1].startswith("MATCH,"):
         fail(errors, "routing rules must end with MATCH")
@@ -174,18 +152,15 @@ def main() -> int:
     elif apple_rule is not None and apns_rule > apple_rule:
         fail(errors, "Apple APNs rule must appear before the broader apple_domain rule")
 
-    # V4.3 DNS invariant: Fake-IP is the default; Real-IP is exception-only.
     if not fake_filter or fake_filter[-1] != "MATCH,fake-ip":
         fail(errors, "fake-ip-filter must end with MATCH,fake-ip")
 
-    missing_real_ip = REQUIRED_REAL_IP_FILTERS - set(
-        item for item in fake_filter if isinstance(item, str)
-    )
+    missing_real_ip = REQUIRED_REAL_IP_FILTERS - {item for item in fake_filter if isinstance(item, str)}
     for item in sorted(missing_real_ip):
         fail(errors, f"missing required Real-IP compatibility rule: {item}")
 
     if "RULE-SET,cn_domain,real-ip" in fake_filter:
-        fail(errors, "cn_domain must not be globally forced to Real-IP; V4.3 defaults ordinary domains to Fake-IP")
+        fail(errors, "cn_domain must not be globally forced to Real-IP")
 
     proxy_providers = data.get("proxy-providers") or {}
     if isinstance(proxy_providers, dict):
@@ -212,10 +187,7 @@ def main() -> int:
         if not value.upper().startswith("YOUR_"):
             fail(errors, "found a query-string credential that does not look like a placeholder")
 
-    for value in re.findall(
-        r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
-        raw,
-    ):
+    for value in re.findall(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b", raw):
         if value.lower() != PLACEHOLDER_UUID:
             fail(errors, "found a UUID that does not match the public placeholder UUID")
 
@@ -249,10 +221,7 @@ def main() -> int:
     print(f"  rule-providers:  {len(providers)}")
     print(f"  fake-ip-filter:  {len(fake_filter)} rules")
     print("  secret scan:     passed")
-    if args.skip_network:
-        print("  provider URLs:   skipped")
-    else:
-        print(f"  provider URLs:   {checked_urls} checked")
+    print("  provider URLs:   skipped" if args.skip_network else f"  provider URLs:   {checked_urls} checked")
     return 0
 
 
