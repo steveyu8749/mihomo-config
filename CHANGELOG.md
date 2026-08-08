@@ -1,5 +1,17 @@
 # Changelog
 
+## V4.2
+
+- 修正 `apple_domain` 的 MetaCubeX Rule Provider 路径，补回缺失的 `/geo/`。
+- 新增 `DOMAIN-SUFFIX,push.apple.com,🍎 Apple`，让 Apple APNs 默认直连，同时保留手动切换代理能力。
+- DNS `fake-ip-filter` 新增 `push.apple.com -> real-ip`，使 APNs 的 DNS 行为与直连策略一致。
+- 将 ChatGPT 从宽泛的 `category-ai-!cn` 改为专用 `openai.mrs`，避免 Microsoft Copilot、Google AI、GitHub Copilot 等被错误归入 ChatGPT 组。
+- 将 `geolocation-!cn` 调整到 `cn_domain` 之前；DNS Fake-IP 决策同步采用相同优先级。
+- 明确 Google / ProxyLite / GFW / `geolocation-!cn` 优先使用 Fake-IP，其余中国域名再使用 Real-IP。
+- 修正美国节点筛选中的裸 `us` 匹配，降低误匹配 Australia 等节点名称的概率。
+- 校验脚本新增规则顺序、OpenAI/APNs 语义检查，以及公开 Rule Provider URL 可达性检查。
+- README 与设计说明补充 iOS APNs、Android FCM、DNS/Fake-IP 与 Rules 的联动逻辑。
+
 ## V4.1
 
 - 新增 `scripts/validate_config.py`，统一检查 YAML、策略组引用、Rule Provider 引用和公开模板脱敏状态。
