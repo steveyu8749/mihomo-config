@@ -1,5 +1,5 @@
 # ==============================================================================
-# Mihomo V4.4 - 公开脱敏模板
+# Mihomo V4.5 - 公开脱敏模板
 # 使用场景：手机 / 电脑本机运行 Mihomo，主要通过 TUN 接管系统流量。
 # 设计目标：
 #   1. 保留国内直连 / 国外代理的分流习惯；
@@ -120,8 +120,7 @@ dns:                                                      # Mihomo 内置 DNS �
   fake-ip-filter-mode: rule                               # 使用规则模式，显式定义少量 Real-IP 例外
   fake-ip-filter:                                         # 未命中例外的域名最终统一返回 Fake-IP
     - RULE-SET,private_domain,real-ip                     # 私有/本地域名返回真实地址；已包含 .local 与 home.arpa
-    - DOMAIN,dns.msftncsi.com,real-ip                    # Windows NCSI DNS 探测要求固定的真实 A 记录
-    - DOMAIN-SUFFIX,push.apple.com,real-ip                # APNs 可能绕过 VPN，避免下发只能由 Mihomo 解释的 Fake-IP
+    - RULE-SET,fakeip_compat,real-ip                     # 少量已确认兼容项集中维护，避免把大类域名整体排除出 Fake-IP
     - MATCH,fake-ip                                       # 其余域名（包括普通国内域名）统一使用 Fake-IP
   default-nameserver:                                     # Bootstrap DNS，仅用于解析 DNS 上游自身域名
     - 223.5.5.5                                           # AliDNS 纯 IP Bootstrap DNS
@@ -175,7 +174,6 @@ rules:                                                    # 实际流量分流�
   - RULE-SET,sciencedirect_domain,🎯 直连                  # ScienceDirect 直连
   - RULE-SET,elsevier_domain,🎯 直连                       # Elsevier 直连
   - RULE-SET,clarivate_domain,🎯 直连                      # Clarivate 直连
-  - RULE-SET,cnki_domain,🎯 直连                           # CNKI 直连
   - RULE-SET,onedrive_domain,🐬 OneDrive                  # OneDrive 独立策略组；需位于 Microsoft 前
   - RULE-SET,github_domain,👨🏿‍💻 GitHub                    # GitHub 独立策略组；Microsoft 集合包含 GitHub，因此需优先
   - RULE-SET,microsoft_domain,🪟 Microsoft                # Microsoft 宽泛策略组
@@ -202,9 +200,18 @@ rules:                                                    # 实际流量分流�
 # ==============================================================================
 # 规则集 Provider
 # ==============================================================================
-# interval: 18000（5 小时）；规则集通过 ♻️ 自动选择 更新。
+# 远程 Rule Provider 每 24 小时更新；GitHub Raw 继续通过 ♻️ 自动选择 拉取。
 rule-providers:
-  private_domain: &domain {type: http, behavior: domain, format: mrs, interval: 18000, proxy: ♻️ 自动选择, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}  # 私有域名，同时定义 &domain
+  # 本地 inline 兼容集：不依赖远程下载，只收纳有明确理由的 Real-IP 例外。
+  fakeip_compat:
+    type: inline
+    behavior: domain
+    payload:
+      - dns.msftncsi.com                                  # Windows NCSI DNS 探测要求固定真实 A 记录
+      - "+.push.apple.com"                                # APNs 可能绕过 VPN，避免依赖 Fake-IP 映射
+      - "+.market.xiaomi.com"                             # 小米应用商店兼容；仅改变 DNS 结果，不改变 DIRECT / PROXY 路由
+
+  private_domain: &domain {type: http, behavior: domain, format: mrs, interval: 86400, proxy: ♻️ 自动选择, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}  # 私有域名，同时定义 &domain
   openai_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs"}  # OpenAI / ChatGPT 专用域名
   youtube_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}  # YouTube
   google_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}  # Google；包含 Google FCM 相关集合
@@ -222,11 +229,10 @@ rule-providers:
   cn_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}  # 中国域名
   sciencedirect_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/sciencedirect.mrs"}  # ScienceDirect
   elsevier_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/elsevier.mrs"}  # Elsevier
-  cnki_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cnki.mrs"}  # CNKI
   clarivate_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/clarivate.mrs"}  # Clarivate
-  proxylite: &classical_text {type: http, behavior: classical, format: text, interval: 18000, proxy: ♻️ 自动选择, url: "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_RULE_REPO/refs/heads/main/ProxyLite.list"}  # 自定义 ProxyLite；请替换为自己的规则源
+  proxylite: &classical_text {type: http, behavior: classical, format: text, interval: 86400, proxy: ♻️ 自动选择, url: "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_RULE_REPO/refs/heads/main/ProxyLite.list"}  # 自定义 ProxyLite；请替换为自己的规则源
   adobeisdumb: {<<: *classical_text, format: yaml, url: "https://raw.githubusercontent.com/ignaciocastro/a-dove-is-dumb/refs/heads/main/clash.yaml"}  # Adobe 屏蔽规则
-  cn_ip: &ip {type: http, behavior: ipcidr, format: mrs, interval: 18000, proxy: ♻️ 自动选择, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}  # 中国 IP，同时定义 &ip
+  cn_ip: &ip {type: http, behavior: ipcidr, format: mrs, interval: 86400, proxy: ♻️ 自动选择, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}  # 中国 IP，同时定义 &ip
   google_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"}  # Google IP
   telegram_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"}  # Telegram IP
   netflix_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"}  # Netflix IP
