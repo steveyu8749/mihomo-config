@@ -22,9 +22,9 @@
 proxy-providers:                                          # 机场订阅 Provider 总表
   Provider_A: &airport                                    # 订阅 A；同时定义 Provider 公共锚点 &airport
     type: http                                            # 通过 HTTP(S) URL 拉取订阅内容
-    url: "https://example.com/provider-a/subscribe?token=YOUR_TOKEN_A"  # 订阅地址占位符
+    url: "订阅url"                                        # 订阅地址占位符
     interval: 18000                                       # 每 5 小时刷新一次订阅
-    proxy: 直连                                            # 订阅文件本身通过硬 DIRECT 下载
+    proxy: 直连                                           # 订阅文件本身通过硬 DIRECT 下载
     health-check:                                         # Provider 节点可用性检查
       enable: true                                        # 启用节点健康检查
       url: https://www.gstatic.com/generate_204           # 轻量 204 健康检查地址
@@ -32,11 +32,11 @@ proxy-providers:                                          # 机场订阅 Provide
 
   Provider_B:                                             # 订阅 B Provider
     <<: *airport                                          # 继承公共 Provider 设置
-    url: "https://example.com/provider-b/subscribe?token=YOUR_TOKEN_B"  # 订阅地址占位符
+    url: "订阅url"                                         # 订阅地址占位符
 
   Provider_C:                                             # 订阅 C Provider
     <<: *airport                                          # 继承公共 Provider 设置
-    url: "https://example.com/provider-c/subscribe?token=YOUR_TOKEN_C"  # 订阅地址占位符
+    url: "订阅url"                                        # 订阅地址占位符
 
 # ==============================================================================
 # 手工节点
@@ -44,7 +44,6 @@ proxy-providers:                                          # 机场订阅 Provide
 # 保留一个硬 DIRECT 出站和一个 VLESS Vision 示例节点。
 proxies:                                                  # 手工定义的本地出站节点
   - {name: 直连, type: direct}                             # 硬 DIRECT 出站，供规则和策略组引用
-  - {name: "🇺🇸 Custom-VLESS", type: vless, server: your-vps.example.com, port: 443, uuid: 00000000-0000-4000-8000-000000000000, network: tcp, tls: true, udp: true, flow: xtls-rprx-vision, servername: your-vps.example.com, client-fingerprint: chrome, alpn: [h2, http/1.1]}  # 示例节点；请替换 server / uuid / servername
 
 # ==============================================================================
 # 全局基础设置
@@ -140,24 +139,21 @@ proxy-groups:                                             # 所有可在客户�
   - &service                                              # 业务策略组公共模板；每个业务组拥有独立的节点选择状态
     name: 🐟 漏网之鱼                                     # MATCH 最终兜底策略组，同时作为 YAML Anchor
     type: select                                          # 完全手工选择
-    proxies: [🚀 默认代理, 🎯 直连]                        # 优先继承默认代理，也允许切换到可控直连组
-    include-all: true                                     # 业务组内也直接列出全部代理节点，可针对单一服务单独选节点
-    exclude-type: direct                                  # 硬 DIRECT 不混入节点列表；直连通过“🎯 直连”显式选择
+    proxies: [🚀 默认代理, 直连]                           # 优先继承默认代理，也允许切换到可控直连组
 
   - {<<: *service, name: 🤖 ChatGPT}                      # OpenAI / ChatGPT 独立策略组
   - {<<: *service, name: 📹 YouTube}                      # YouTube 独立策略组
   - {<<: *service, name: 🍀 Google}                       # Google / Android FCM 独立策略组
-  - {<<: *service, name: 👨🏿‍💻 GitHub}                    # GitHub 独立策略组
+  - {<<: *service, name: 👨🏿‍💻 GitHub}                       # GitHub 独立策略组
   - {<<: *service, name: 🐬 OneDrive}                     # OneDrive 独立策略组
   - {<<: *service, name: 🪟 Microsoft}                    # Microsoft 独立策略组
   - {<<: *service, name: 🎵 TikTok}                       # TikTok 独立策略组
   - {<<: *service, name: 📲 Telegram}                     # Telegram 独立策略组
   - {<<: *service, name: 🎥 NETFLIX}                      # Netflix 独立策略组
-  - {<<: *service, name: ✈️ Speedtest}                   # Speedtest 独立策略组
+  - {<<: *service, name: ✈️ Speedtest}                    # Speedtest 独立策略组
   - {<<: *service, name: 💶 PayPal}                       # PayPal 独立策略组
 
   - {name: 🍎 Apple, type: select, proxies: [直连, 🚀 默认代理]}  # APNs / Apple CN 默认硬直连，异常时可切默认代理
-  - {name: 🎯 直连, type: select, proxies: [直连, 🚀 默认代理]}     # 可切换直连策略；与硬 DIRECT 出站“直连”区分
 
 # ==============================================================================
 # 分流规则
@@ -199,6 +195,12 @@ rules:                                                    # 实际流量分流�
 # ==============================================================================
 # 远程 Rule Provider 每 24 小时更新；公共域名与服务 IP 均使用 MRS，避免依赖客户端 GeoData。
 # GitHub Raw 规则统一通过“🚀 默认代理”拉取；该组只包含代理节点，不会退化为 DIRECT。
+# type：可选http/file/inline  behavior：可选domain/ipcidr/classical format：可选yaml/text/mrs
+rule-anchor:
+  ip: &ip {type: http, interval: 86400, behavior: ipcidr, proxy: 🚀 默认代理, format: mrs}
+  domain: &domain {type: http, interval: 86400, behavior: domain, proxy: 🚀 默认代理, format: mrs}
+  class: &class {type: http, interval: 86400, behavior: classical, proxy: 🚀 默认代理, format: text}
+  
 rule-providers:
   # 本地 inline 兼容集：不依赖远程下载，只收纳有明确理由的 Real-IP 例外。
   fakeip_compat:
@@ -209,7 +211,7 @@ rule-providers:
       - "+.push.apple.com"                                # APNs 可能绕过 VPN，避免依赖 Fake-IP 映射
       - "+.market.xiaomi.com"                             # 小米应用商店兼容；仅改变 DNS 结果，不改变 DIRECT / PROXY 路由
 
-  private_domain: &domain {type: http, behavior: domain, format: mrs, interval: 86400, proxy: 🚀 默认代理, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}  # 私有域名，同时定义 &domain
+  private_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}  # 私有域名，同时定义 &domain
   openai_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/openai.mrs"}  # OpenAI / ChatGPT 专用域名
   youtube_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}  # YouTube
   google_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}  # Google；包含 Google FCM 相关集合
@@ -228,9 +230,9 @@ rule-providers:
   sciencedirect_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/sciencedirect.mrs"}  # ScienceDirect
   elsevier_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/elsevier.mrs"}  # Elsevier
   clarivate_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/clarivate.mrs"}  # Clarivate
-  proxylite: &classical_text {type: http, behavior: classical, format: text, interval: 86400, proxy: 🚀 默认代理, url: "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_RULE_REPO/refs/heads/main/ProxyLite.list"}  # 自定义 ProxyLite；请替换为自己的规则源
-  adobeisdumb: {<<: *classical_text, format: yaml, url: "https://raw.githubusercontent.com/ignaciocastro/a-dove-is-dumb/refs/heads/main/clash.yaml"}  # Adobe 屏蔽规则
-  cn_ip: &ip {type: http, behavior: ipcidr, format: mrs, interval: 86400, proxy: 🚀 默认代理, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}  # 中国 IP，同时定义 &ip
+  proxylite: {<<: *class, url: "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_RULE_REPO/refs/heads/main/ProxyLite.list"}  # 自定义 ProxyLite；请替换为自己的规则源
+  adobeisdumb: {<<: *class, url: "https://raw.githubusercontent.com/ignaciocastro/a-dove-is-dumb/refs/heads/main/clash.yaml"}  # Adobe 屏蔽规则
+  cn_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}  # 中国 IP，同时定义 &ip
   google_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"}  # Google IP
   telegram_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"}  # Telegram IP
   netflix_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"}  # Netflix IP
