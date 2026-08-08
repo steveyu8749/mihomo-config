@@ -2,25 +2,28 @@
 
 [![Validate Mihomo template](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml/badge.svg)](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml)
 
-一份面向 **手机 / 电脑本机 TUN 使用场景** 的 Mihomo 配置模板。重点不是堆叠参数，而是让每个配置项都能解释、能维护，并尽量降低局域网、DNS、Sniffer 与 TUN 之间的兼容性问题。
+一份面向 **手机 / 电脑本机 TUN 使用场景** 的 Mihomo 配置模板。当前版本为 **V4.2**。重点不是堆叠参数，而是让 TUN、DNS、Fake-IP、Sniffer 和 Rules 的行为保持一致，并尽量减少局域网、国内 App 与移动端推送的兼容性问题。
 
 ## 设计目标
 
 - 以 **TUN** 作为主要系统级接管方式，同时保留 `mixed-port`、`redir-port`、`tproxy-port` 作为额外入口。
 - RFC1918 私网、链路本地、组播和广播地址在 TUN 路由层直接绕过，优先保证局域网发现和设备互联。
 - `100.64.0.0/10` 作为 RFC6598 / CGNAT 可选项保留，但默认不开启。
-- DNS 使用 **Fake-IP**；默认上游采用国内 DoH，`direct-nameserver` 保留为 `system`。
+- DNS 使用 **Fake-IP**；本地/系统兼容项优先 Real-IP，明确代理集合优先 Fake-IP，其余中国域名再使用 Real-IP。
+- 默认 DNS 上游使用国内 DoH，`direct-nameserver` 保留为 `system`。
 - Sniffer 用于恢复域名并辅助规则匹配；TLS / QUIC 默认不改写真实连接目标，HTTP 单独允许覆盖。
+- OpenAI / ChatGPT 使用独立规则，不再把整个 `category-ai-!cn` 都归入 ChatGPT 策略组。
+- Apple APNs 明确进入 `🍎 Apple` 组且默认直连；Android FCM 继续由 Google 规则覆盖并走 `🍀 Google`。
 - 使用 YAML Anchor 减少 Provider、策略组和 Rule Provider 的重复配置。
 - 进程规则保留 `find-process-mode: strict`，方便桌面端按进程分流。
 
 ## 文件
 
 - `config.example.yaml`：完整公开模板，已经移除真实订阅地址、Token、私有服务器地址、UUID 和个人自定义规则源。
-- `scripts/validate_config.py`：结构与脱敏检查脚本，可在本地或 CI 中运行。
+- `scripts/validate_config.py`：结构、脱敏、规则顺序与 Rule Provider URL 检查脚本。
 - `.github/workflows/validate.yml`：GitHub Actions 自动校验工作流。
 - `CHANGELOG.md`：记录配置设计上的重要调整。
-- `docs/design-notes.md`：解释 TUN、DNS、Sniffer 等关键设计取舍。
+- `docs/design-notes.md`：解释 TUN、DNS、Sniffer、推送和规则优先级等关键取舍。
 - `.gitignore`：避免实际使用的私密配置被误提交。
 
 ## 使用方法
@@ -40,7 +43,7 @@
 
 3. `config.yaml` 已被 `.gitignore` 忽略，**不要强制提交真实配置**。
 
-4. 导入 Mihomo / Clash Verge Rev 等兼容客户端后，再根据自己的网络环境测试 TUN、局域网发现和应用分流。
+4. 导入 Mihomo / Clash Verge Rev 等兼容客户端后，再根据自己的网络环境测试 TUN、局域网发现、国内 App、国外 App 与推送通知。
 
 ## 自动校验
 
@@ -50,26 +53,44 @@
 - `proxy-groups` 引用的成员是否存在。
 - Rules 指向的策略组 / 出站是否存在。
 - `RULE-SET` 与 DNS `fake-ip-filter` 引用的 Rule Provider 是否存在。
-- 公开模板中的机场订阅地址是否仍是占位形式。
-- 手工远程节点的服务器地址和 UUID 是否仍是占位形式。
+- `geolocation-!cn` 是否在 `cn_domain` 前，避免宽泛 CN 集合抢先匹配。
+- ChatGPT 是否使用 `openai_domain` 专用规则。
+- Apple APNs 是否存在显式 `push.apple.com` 分流。
+- 公开模板中的机场订阅地址、远程节点地址和 UUID 是否仍为占位形式。
 - 常见 query-string Token / API Key / Secret 与 UUID 是否疑似误提交。
+- 非占位的公开 Rule Provider URL 是否仍然可访问，避免类似路径拼写错误长期潜伏。
 
-本地也可以运行同一套检查：
+本地运行完整检查：
 
 ```bash
 python -m pip install PyYAML
 python scripts/validate_config.py config.example.yaml
 ```
 
-这套检查用于发现 YAML、引用和脱敏问题，**不等同于 Mihomo 内核的完整运行时验证**；真实配置仍应在实际客户端中测试。
+如果当前环境无法联网，可以只跳过远程 URL 可达性检查：
+
+```bash
+python scripts/validate_config.py config.example.yaml --skip-network
+```
+
+这套检查用于发现 YAML、引用、规则优先级、公开资源失效和脱敏问题，**不等同于 Mihomo 内核的完整运行时验证**；真实配置仍应在实际客户端中测试。
 
 ## 关键取舍
 
-### DNS
+### DNS / Fake-IP
 
-`nameserver` 是 Mihomo 默认 DNS 上游，本模板使用 AliDNS 与 DNSPod 的 DoH：兼顾国内直连可达性和 DNS 传输加密。
+`nameserver` 使用 AliDNS 与 DNSPod 的 DoH，主要负责 Mihomo 的默认解析；`direct-nameserver: system` 被刻意保留，让最终确定为 DIRECT 的流量可以使用当前系统 / 路由器 / 运营商 DNS 得到更贴近本地网络的解析结果。
 
-`direct-nameserver: system` 被刻意保留：当流量最终确定为 DIRECT 时，可以使用当前系统 / 路由器 / 运营商 DNS 得到适合本地网络的最终解析结果。
+V4.2 将 Fake-IP 决策顺序调整为：
+
+```text
+本地 / 系统兼容项 → Real-IP
+明确代理集合       → Fake-IP
+其余中国域名       → Real-IP
+其余域名           → Fake-IP
+```
+
+这样 DNS 决策与实际 Routing 规则保持一致，减少“先按 CN 得到真实 IP，随后又被规则判定为代理”的交叉情况。
 
 ### Sniffer
 
@@ -79,7 +100,7 @@ Sniffer 的核心作用是从 HTTP Host、TLS SNI、QUIC 握手中恢复域名�
 - HTTP 单独 `override-destination: true`
 - TLS / QUIC 主要用于识别域名，不主动替换应用原本的目标
 
-这样更偏向兼容性，而不是最大程度介入连接目标。
+这样更偏向兼容性，而不是最大程度介入连接目标。微信、QQ、小米以及 Apple Push 只保留有明确兼容性理由的 `skip-domain`，不无限扩展例外列表。
 
 ### LAN / TUN
 
@@ -87,10 +108,34 @@ Sniffer 的核心作用是从 HTTP Host、TLS SNI、QUIC 握手中恢复域名�
 
 `100.64.0.0/10` 不是 RFC1918 私网，所以只以注释形式保留；只有确定自己的 CGNAT、Overlay 或其他网络确实使用它时再启用。
 
+### iPhone / iPad 与 Android 推送
+
+- iPhone / iPad 的系统级代理依赖 iOS/iPadOS 的 Packet Tunnel / VPN 机制；`redir-port` 与 `tproxy-port` 主要为其他平台预留。
+- Apple APNs 使用 `push.apple.com` 显式进入 `🍎 Apple`，默认选择 `直连`，必要时仍可手动切换代理。
+- iOS 上国外 App 的业务流量仍按对应域名规则分流；“收到通知”和“打开 App 后访问国外服务”是两条不同链路。
+- Android FCM 属于 Google 网络，本模板不增加粗粒度端口规则，而由 `google_domain` / `google_ip` 统一进入 `🍀 Google`。
+- 国内厂商推送不额外强制代理，继续依赖国内域名 / IP 与最终规则自然直连。
+
+### Rules 优先级
+
+规则遵循“越具体越靠前，越宽泛越靠后”：
+
+```text
+私有/进程规则
+→ 独立业务规则（OpenAI、Google、Apple、Telegram 等）
+→ 自定义 ProxyLite / GFW
+→ geolocation-!cn
+→ cn_domain
+→ IP 兜底
+→ MATCH
+```
+
+`geolocation-!cn` 位于 `cn_domain` 前，是为了在两个集合存在交叉时优先保护明确的非中国服务。
+
 ## 安全
 
 这个仓库应只保存**模板**。真实订阅 Token、UUID、私有服务器信息不要进入 Git 历史。即使以后将仓库改为 Private，也建议遵守同样原则。
 
 ## 说明
 
-该模板针对特定使用习惯持续整理，并不是“所有 Mihomo 用户的唯一最佳配置”。网络环境、客户端平台和服务规则不同，都可能需要局部调整。
+该模板针对特定使用习惯持续整理，并不是“所有 Mihomo 用户的唯一最佳配置”。网络环境、客户端平台和服务规则不同，都可能需要局部调整。V4.2 之后优先根据真实故障修正，而不是继续为了“更完整”堆叠规则。
