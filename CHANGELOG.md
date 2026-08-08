@@ -1,5 +1,18 @@
 # Changelog
 
+## V4.3
+
+- 重新定义 Fake-IP 策略：普通国内域名也默认使用 Fake-IP，DIRECT / PROXY 只由 Routing Rules 决定。
+- 删除 `RULE-SET,cn_domain,real-ip`，不再把整个中国域名集合预先排除出 Fake-IP。
+- 删除 Google / ProxyLite / GFW / `geolocation-!cn` 的显式 `fake-ip` 项，统一由最终 `MATCH,fake-ip` 兜底。
+- 删除 `time.*.com` 与 `pool.ntp.org` Real-IP 例外；当前 Mihomo 在 Fake-IP TUN 下可对 DIRECT 的 TCP/UDP 使用 `direct-nameserver` 重新解析，没有必要预防性排除普通时间同步域名。
+- 删除 `services.googleapis.cn` 与 `xn--ngstr-lra8j.com` Real-IP 例外；目前没有足够证据证明它们必须绕过 Fake-IP。
+- 保留私有域名、`.local`、`home.arpa`、Windows NCSI 与 Apple APNs 的 Real-IP 例外。
+- APNs 继续同时使用 `push.apple.com -> 🍎 Apple`、Real-IP 与 Sniffer skip，兼容 Apple 平台可能绕过 VPN 的系统推送流量。
+- `fake-ip-filter` 从 16 条精简为 7 条。
+- 校验脚本新增 V4.3 DNS 约束：必须以 `MATCH,fake-ip` 收尾，并禁止再次全局设置 `cn_domain -> real-ip`。
+- README 与设计说明更新为“Fake-IP 默认、Real-IP 例外”的模型。
+
 ## V4.2
 
 - 修正 `apple_domain` 的 MetaCubeX Rule Provider 路径，补回缺失的 `/geo/`。
