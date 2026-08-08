@@ -12,7 +12,7 @@ from yaml.nodes import MappingNode
 from yaml.resolver import BaseResolver
 
 
-TEMPLATE_VERSION = "V4.8"
+TEMPLATE_VERSION = "V4.9"
 PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 DEFAULT_PROXY = "🚀 默认代理"
 HARD_DIRECT = "直连"
@@ -98,10 +98,11 @@ CUSTOM_DOMAIN_PROVIDER_PATHS = {
 
 REQUIRED_FAKEIP_COMPAT = {
     "dns.msftncsi.com",
-    "+.services.googleapis.cn",
+    "+.googleapis.cn",
     "+.xn--ngstr-lra8j.com",
     "+.push.apple.com",
     "+.market.xiaomi.com",
+    "+.plex.direct",
 }
 
 REQUIRED_DIRECT_DOMAINS = {
@@ -508,7 +509,7 @@ def validate_maintained_rule_files(root: Path, errors: list[str]) -> None:
     ):
         fail(
             errors,
-            "rules/FakeIPFilter.list must contain exactly the five audited compatibility entries",
+            "rules/FakeIPFilter.list must contain exactly the six audited compatibility entries",
         )
 
 

@@ -5,6 +5,16 @@
 # 2. 未被更合适的专用策略组处理；
 # 3. 不因“国内域名”这一宽泛理由重复收录 cn_domain 已覆盖的内容。
 #
+# 当前基线逐项展开自 V2Fly domain-list-community 的 sciencedirect、elsevier、
+# clarivate（含 sci）数据；MetaCubeX 的同名 MRS 由该数据生成。另以
+# blackmatrix7 的 Scholar / Direct 列表交叉检查，但不合并其中普通学术站点、
+# PT、下载进程或厂商大类，避免把“可能适合直连”误写成“必须硬直连”。
+#
+# 上游参考（复核日期：2026-08-08）：
+# https://github.com/v2fly/domain-list-community/tree/master/data
+# https://github.com/MetaCubeX/meta-rules-dat/tree/meta/geo/geosite
+# https://github.com/blackmatrix7/ios_rule_script/tree/master/rule/Clash/Scholar
+#
 # 新增前请同时说明服务用途和直连原因。专用业务规则位于本列表之前，
 # 因此这里不会抢先覆盖 Google、Microsoft、Apple 等独立策略组。
 

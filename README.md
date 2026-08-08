@@ -2,7 +2,7 @@
 
 [![Validate Mihomo template](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml/badge.svg)](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml)
 
-一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.8**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
+一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.9**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
 
 这不是机场订阅转换模板，也不是自动测速方案。节点由用户手工选择，配置专注于分流语义和跨客户端一致性。
 
@@ -151,15 +151,20 @@ fake-ip-filter:
 
 ```text
 dns.msftncsi.com
-+.services.googleapis.cn
++.googleapis.cn
 +.xn--ngstr-lra8j.com
 +.push.apple.com
 +.market.xiaomi.com
++.plex.direct
 ```
 
-其中两个 Google 条目用于处理部分 Android / 国行环境下 Google Play 下载等待或 CDN 选择异常；相关兼容现象可参考 [OpenWrt-nikki #278](https://github.com/nikkinikki-org/OpenWrt-nikki/discussions/278) 与 [gfwlist #2255](https://github.com/gfwlist/gfwlist/issues/2255)。它们返回真实 IP 后仍由 `google_domain`、`google_ip` 和后续规则决定出口，不会因为进入 Fake-IP Filter 就自动直连。
+`+.googleapis.cn` 已包含 `services.googleapis.cn` 及其余子域，与 `+.xn--ngstr-lra8j.com` 一起处理部分 Android / 国行环境下 Google Play 下载等待或 CDN 选择异常；相关现象可参考 [OpenWrt-nikki #278](https://github.com/nikkinikki-org/OpenWrt-nikki/discussions/278)、[OpenClash #4443](https://github.com/vernesong/OpenClash/issues/4443) 与 [gfwlist #2472](https://github.com/gfwlist/gfwlist/issues/2472)。这些域名返回真实 IP 后仍由 `google_domain`、`google_ip` 和后续规则决定出口，不会因为进入 Fake-IP Filter 就自动直连。
 
-暂时不增加 NTP、STUN、游戏、普通国内外域名或整类厂商集合。只有出现可稳定复现、并确认根因是“应用收到 Fake-IP”而不是路由出口错误时，才加入最小范围的例外。列表中每项必须有明确故障机制；为了心理保险而加入的条目不接受。
+其余例外也只解决明确的地址依赖：Windows NCSI 会验证 DNS 探测结果；APNs 系统连接可能需要可直接使用的真实端点；`plex.direct` 本身会解析到 Plex 服务器的局域网地址，Fake-IP 会破坏本地安全直连；小米项保留应用商店与天气组件的已知兼容处理。可分别参照 [Microsoft NCSI 指南](https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/troubleshoot-ncsi-guidance)、[Apple APNs 网络要求](https://support.apple.com/guide/deployment/configure-devices-to-work-with-apns-dep2de55389a/web) 与 [Plex 安全连接说明](https://support.plex.tv/articles/206225077-how-to-use-secure-server-connections/)。
+
+Xbox 的四种传统主机模式保留为 `FakeIPFilter.list` 中的注释候选，没有默认启用。多份现有列表都包含它们，但 Mihomo 社区目前只能支持“P2P / NAT / QoS 场景可能需要真实端点”这一判断，不能证明默认使用 Fake-IP 必然故障。只有实际出现联机、派对语音或 NAT 检测异常，并确认根因是 Fake-IP 时才启用；Xbox 的日常分流仍由独立的 `xbox_domain` 和 `🪟 Microsoft` 组处理。
+
+不会引入整套第三方 Fake-IP Filter，也不增加 NTP、通用 STUN、普通游戏、音乐、普通国内外域名或整类厂商集合。网上常见的 ShellCrash、qichiyuhub、wwqgtxx 与 silver716 列表之间存在继承关系，重复出现不能代替故障证据。只有出现可稳定复现、并确认根因是“应用收到 Fake-IP”而不是路由出口错误时，才加入最小范围的例外。
 
 Real-IP 例外不决定出口。例如 `push.apple.com` 返回真实 IP 后，实际连接仍会命中 `🍎 Apple` 规则。
 
@@ -185,7 +190,7 @@ MetaCubeX 的 `private.mrs` 包含 `198.18.0.0/15`，而默认 Fake-IP 池 `198.
 
 ### `cache-algorithm`
 
-Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.8 不显式设置 `cache-algorithm`，继续使用默认 LRU。
+Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.9 不显式设置 `cache-algorithm`，继续使用默认 LRU。
 
 ARC 并不等于无条件更快。没有观测到 DNS 缓存频繁抖动、也没有针对设备内存与访问模式做测量时，增加该参数只会扩大配置变量，难以证明实际收益。如果以后有明确的缓存命中问题，可以单独测试：
 
@@ -210,7 +215,7 @@ HTTP Host、TLS SNI 与 QUIC 握手信息只用于补充域名识别和规则匹
 
 ## 分流规则
 
-Mihomo 从上到下匹配，命中后停止。V4.8 的顺序是：
+Mihomo 从上到下匹配，命中后停止。V4.9 的顺序是：
 
 1. 私有域名与私有 IP；
 2. 进程规则；
@@ -243,6 +248,8 @@ ProxyLite 位于所有专用业务域名之后、GFW / 地域规则之前。自�
 ```
 
 它位于全部专用业务规则之后、ProxyLite 与宽泛地域规则之前。这样新增的普通直连例外会优先于 ProxyLite，但不会抢走 Google、Microsoft、Apple、OneDrive 等已经明确分组的服务。
+
+这 21 条已与 [V2Fly `domain-list-community`](https://github.com/v2fly/domain-list-community/tree/master/data) 的 `sciencedirect`、`elsevier`、`clarivate`（含 `sci`）逐条核对，也与 [MetaCubeX MRS](https://github.com/MetaCubeX/meta-rules-dat/tree/meta/geo/geosite) 和 [blackmatrix7 Scholar](https://github.com/blackmatrix7/ios_rule_script/tree/master/rule/Clash/Scholar) 交叉比较。当前没有扩大列表：blackmatrix7 的 Direct / Scholar 还包含普通学术站点、Google、Apple、PT 与进程规则，它们并不等于“必须硬直连”。
 
 不要把完整 `cn_domain`、`cn_ip` 已覆盖的内容复制进来。只有明确要求硬直连、现有 Provider 没有正确处理的域名才应加入；如果一个域名需要独立策略组，就不应放进 Direct。
 
@@ -329,7 +336,7 @@ HTTP Rule Provider 每 24 小时更新。模板没有给它们设置 `proxy`，�
 
 这与 Proxy Provider 不同：机场订阅需要先提供代理节点，所以模板为它明确设置硬直连，避免循环依赖。
 
-所有启用的 MetaCubeX MRS URL 已在本次 V4.8 复审中检查存在性，格式与声明的 `behavior` 一致；两个自维护文本列表会在 CI 中额外转换为 MRS，以验证 Mihomo 能实际解析。
+所有启用的 MetaCubeX MRS URL 已在本次 V4.9 复审中检查存在性，格式与声明的 `behavior` 一致；两个自维护文本列表会在 CI 中额外转换为 MRS，以验证 Mihomo 能实际解析。
 
 ## Adobe：默认完全关闭
 

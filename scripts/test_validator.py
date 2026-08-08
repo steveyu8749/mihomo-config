@@ -162,8 +162,8 @@ TEST_CASES: list[tuple[str, str, Callable[[str], str], str]] = [
     (
         "missing audited Fake-IP exception",
         "rules/FakeIPFilter.list",
-        lambda text: replace_once(text, "+.services.googleapis.cn\n", ""),
-        "must contain exactly the five audited compatibility entries",
+        lambda text: replace_once(text, "+.googleapis.cn\n", ""),
+        "must contain exactly the six audited compatibility entries",
     ),
     (
         "classical syntax in domain text list",

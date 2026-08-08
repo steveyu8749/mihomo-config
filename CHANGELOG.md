@@ -1,5 +1,13 @@
 # Changelog
 
+## V4.9
+
+- 以 V2Fly `domain-list-community`、MetaCubeX MRS 与 blackmatrix7 Scholar / Direct 交叉复核 `rules/Direct.list`；确认现有 21 条已完整覆盖原来的 ScienceDirect、Elsevier、Clarivate（含 `sci`）三组数据，不把普通学术站点、PT、下载进程或厂商大类误并入硬直连列表。
+- 重新审查 ShellCrash、qichiyuhub、wwqgtxx 与 silver716 的 Fake-IP Filter；识别其规则继承关系，不以重复出现次数代替故障证据，也不导入其 NTP、通用 STUN、音乐、普通游戏和整类国内域名。
+- 将 Google Play Real-IP 例外由 `+.services.googleapis.cn` 收敛为可覆盖该域及相关中国前端的 `+.googleapis.cn`，继续保留 IDN CDN 后缀。
+- 新增 `+.plex.direct`，保留 Plex 返回局域网地址的 DNS 语义；Xbox 的四种传统主机模式仅作为注释候选，因现有证据不足而不默认启用。
+- 两份自维护列表补充来源、收录边界与故障机制；README、设计说明、校验器和回归测试同步升级为 V4.9。
+
 ## V4.8
 
 - 新增仓库自维护的 `rules/Direct.list`，以一个 domain text Provider 统一承载硬直连例外；初始内容合并 ScienceDirect、Elsevier、Clarivate / Web of Science 三个科研集合，以一个下载入口和一条路由规则替代原来的三个入口。

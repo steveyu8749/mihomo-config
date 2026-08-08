@@ -3,12 +3,15 @@
 # 这里只收录“应用收到 Fake-IP 后会出现可复现功能故障”的域名。
 # 普通国内外域名、仅需改变 DIRECT/PROXY 的域名，以及未经验证的预防性条目均不收录。
 # 新增条目时应同步 README、设计说明和校验器中的理由记录。
+#
+# 参考 ShellCrash、qichiyuhub、wwqgtxx 与 silver716 的现有列表时，按故障机制重新
+# 审核而不是求并集；这些项目之间存在继承关系，重复出现不单独视为有效证据。
 
 # Windows NCSI：DNS 探测需要取得预期的真实 A 记录。
 dns.msftncsi.com
 
-# Google Play：部分 Android/国行环境在 Fake-IP 下会出现下载等待或 CDN 选择异常。
-+.services.googleapis.cn
+# Google Play：覆盖 services.googleapis.cn 等中国前端；配合下列 CDN 域解决下载等待。
++.googleapis.cn
 +.xn--ngstr-lra8j.com
 
 # Apple APNs：系统推送连接可能绕过 VPN/TUN，需要可直接使用的真实目标地址。
@@ -16,3 +19,14 @@ dns.msftncsi.com
 
 # 小米系统服务：已知应用商店/天气等组件在 Fake-IP 下可能无法正常工作。
 +.market.xiaomi.com
+
+# Plex：*.plex.direct 会按设备返回局域网地址，用 Fake-IP 替换会破坏本地安全直连。
++.plex.direct
+
+# Xbox 候选（默认不启用）：传统列表普遍包含以下主机形态，但现有资料只能说明
+# P2P / NAT / QoS 场景“可能”需要真实端点，尚不足以作为默认例外。仅在 Xbox
+# 联机、派对语音或 NAT 检测异常且确认 Fake-IP 是根因时，取消对应规则的注释。
+# xbox.*.microsoft.com
+# xbox.*.*.microsoft.com
+# *.*.xboxlive.com
+# xnotify.xboxlive.com
