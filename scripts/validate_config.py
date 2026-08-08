@@ -13,6 +13,14 @@ import yaml
 PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 BUILTIN_TARGETS = {"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"}
 FAKE_IP_RESULTS = {"real-ip", "fake-ip"}
+REQUIRED_REAL_IP_FILTERS = {
+    "RULE-SET,private_domain,real-ip",
+    "DOMAIN-SUFFIX,local,real-ip",
+    "DOMAIN-SUFFIX,home.arpa,real-ip",
+    "DOMAIN-SUFFIX,msftconnecttest.com,real-ip",
+    "DOMAIN-SUFFIX,msftncsi.com,real-ip",
+    "DOMAIN-SUFFIX,push.apple.com,real-ip",
+}
 
 
 def fail(errors: list[str], message: str) -> None:
@@ -100,7 +108,6 @@ def main() -> int:
     provider_names = set(providers) if isinstance(providers, dict) else set()
     valid_targets = proxy_names | group_names | BUILTIN_TARGETS
 
-    # Proxy-group members must resolve to another group, a local proxy, or a builtin target.
     for group in groups:
         if not isinstance(group, dict):
             fail(errors, f"proxy-group entry is not a mapping: {group!r}")
@@ -110,7 +117,6 @@ def main() -> int:
             if member not in valid_targets:
                 fail(errors, f"proxy-group {name!r} references missing member {member!r}")
 
-    # Rule targets and RULE-SET provider references must exist.
     for index, rule in enumerate(rules, start=1):
         if not isinstance(rule, str):
             fail(errors, f"rule #{index} is not a string: {rule!r}")
@@ -135,7 +141,6 @@ def main() -> int:
         if target not in valid_targets:
             fail(errors, f"rule #{index} references missing target {target!r}")
 
-    # DNS fake-ip-filter can also reference rule providers.
     fake_filter = ((data.get("dns") or {}).get("fake-ip-filter") or [])
     for index, item in enumerate(fake_filter, start=1):
         if not isinstance(item, str):
@@ -150,24 +155,38 @@ def main() -> int:
             if parts[2] not in FAKE_IP_RESULTS:
                 fail(errors, f"fake-ip-filter #{index} has invalid result {parts[2]!r}")
 
-    # Template-specific ordering invariants: explicit non-CN routing should win before broad CN matching.
+    # Routing keeps explicit non-CN domains ahead of the broad CN set.
     geo_rule = rule_index(rules, "RULE-SET,geolocation-!cn,")
     cn_rule = rule_index(rules, "RULE-SET,cn_domain,")
     if geo_rule is not None and cn_rule is not None and geo_rule > cn_rule:
         fail(errors, "geolocation-!cn must appear before cn_domain in routing rules")
 
-    geo_fake = rule_index(fake_filter, "RULE-SET,geolocation-!cn,fake-ip")
-    cn_real = rule_index(fake_filter, "RULE-SET,cn_domain,real-ip")
-    if geo_fake is not None and cn_real is not None and geo_fake > cn_real:
-        fail(errors, "geolocation-!cn fake-ip decision must appear before cn_domain real-ip")
+    if not rules or not isinstance(rules[-1], str) or not rules[-1].startswith("MATCH,"):
+        fail(errors, "routing rules must end with MATCH")
 
     if rule_index(rules, "RULE-SET,openai_domain,🤖 ChatGPT") is None:
         fail(errors, "ChatGPT group must use the dedicated openai_domain rule-provider")
 
-    if rule_index(rules, "DOMAIN-SUFFIX,push.apple.com,🍎 Apple") is None:
+    apns_rule = rule_index(rules, "DOMAIN-SUFFIX,push.apple.com,🍎 Apple")
+    apple_rule = rule_index(rules, "RULE-SET,apple_domain,🍎 Apple")
+    if apns_rule is None:
         fail(errors, "Apple APNs must have an explicit push.apple.com rule")
+    elif apple_rule is not None and apns_rule > apple_rule:
+        fail(errors, "Apple APNs rule must appear before the broader apple_domain rule")
 
-    # Public template safety: subscription providers must visibly use placeholders.
+    # V4.3 DNS invariant: Fake-IP is the default; Real-IP is exception-only.
+    if not fake_filter or fake_filter[-1] != "MATCH,fake-ip":
+        fail(errors, "fake-ip-filter must end with MATCH,fake-ip")
+
+    missing_real_ip = REQUIRED_REAL_IP_FILTERS - set(
+        item for item in fake_filter if isinstance(item, str)
+    )
+    for item in sorted(missing_real_ip):
+        fail(errors, f"missing required Real-IP compatibility rule: {item}")
+
+    if "RULE-SET,cn_domain,real-ip" in fake_filter:
+        fail(errors, "cn_domain must not be globally forced to Real-IP; V4.3 defaults ordinary domains to Fake-IP")
+
     proxy_providers = data.get("proxy-providers") or {}
     if isinstance(proxy_providers, dict):
         for name, provider in proxy_providers.items():
@@ -177,7 +196,6 @@ def main() -> int:
             if url and not is_placeholder_url(url):
                 fail(errors, f"proxy-provider {name!r} URL looks live instead of sanitized")
 
-    # Public template safety: manually defined remote nodes must use placeholder endpoints/UUIDs.
     for proxy in proxies:
         if not isinstance(proxy, dict) or proxy.get("type") == "direct":
             continue
@@ -189,7 +207,6 @@ def main() -> int:
         if uuid and uuid != PLACEHOLDER_UUID and "YOUR_" not in uuid:
             fail(errors, f"proxy {name!r} UUID looks live instead of sanitized")
 
-    # Catch common secrets even if they appear outside the expected YAML fields.
     for match in re.finditer(r"(?i)(?:token|auth|api[_-]?key|secret)=([A-Za-z0-9_.-]{12,})", raw):
         value = match.group(1)
         if not value.upper().startswith("YOUR_"):
@@ -202,7 +219,6 @@ def main() -> int:
         if value.lower() != PLACEHOLDER_UUID:
             fail(errors, "found a UUID that does not match the public placeholder UUID")
 
-    # Public Rule Provider URLs should still exist. Placeholder URLs are intentionally skipped.
     checked_urls = 0
     if not args.skip_network and isinstance(providers, dict):
         for name, provider in providers.items():
@@ -231,6 +247,7 @@ def main() -> int:
     print(f"  proxy-groups:    {len(groups)}")
     print(f"  rules:           {len(rules)}")
     print(f"  rule-providers:  {len(providers)}")
+    print(f"  fake-ip-filter:  {len(fake_filter)} rules")
     print("  secret scan:     passed")
     if args.skip_network:
         print("  provider URLs:   skipped")
