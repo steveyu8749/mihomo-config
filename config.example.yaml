@@ -151,6 +151,9 @@ proxy-groups:                                             # 所有可在客户�
 # ==============================================================================
 # Mihomo 按从上到下顺序匹配，命中后停止继续匹配。V4.6 继续使用 MRS Rule Provider，不依赖 GEOSITE/GEOIP。
 rules:                                                    # 实际流量分流规则；从上到下首个命中生效
+  - PROCESS-NAME-REGEX,.*spotify.*,🎯 直连
+  - PROCESS-NAME,onedrive.exe,🎯 直连
+  
   - RULE-SET,private_domain,直连                           # 私有域名硬直连
   - PROCESS-NAME-REGEX,.*spotify.*,🎯 直连                 # Spotify 进程走可切换直连
   - PROCESS-NAME,onedrive.exe,🎯 直连                      # OneDrive 桌面进程优先直连
@@ -158,6 +161,10 @@ rules:                                                    # 实际流量分流�
   - RULE-SET,sciencedirect_domain,🎯 直连                  # ScienceDirect 直连
   - RULE-SET,elsevier_domain,🎯 直连                       # Elsevier 直连
   - RULE-SET,clarivate_domain,🎯 直连                      # Clarivate 直连
+  - RULE-SET,proxylite,🚀 默认代理                         # 自定义 ProxyLite 走默认代理
+  - RULE-SET,bing_domain,🪟 Microsoft
+  - RULE-SET,msn_domain,🪟 Microsoft
+  - RULE-SET,xbox_domain,🪟 Microsoft
   - RULE-SET,onedrive_domain,🐬 OneDrive                  # OneDrive 独立策略组；需位于 Microsoft 前
   - RULE-SET,github_domain,👨🏿‍💻 GitHub                    # GitHub 独立策略组；Microsoft 集合包含 GitHub，因此需优先
   - RULE-SET,microsoft_domain,🪟 Microsoft                # Microsoft 宽泛策略组
@@ -171,10 +178,10 @@ rules:                                                    # 实际流量分流�
   - RULE-SET,telegram_domain,📲 Telegram                  # Telegram 独立策略组
   - RULE-SET,netflix_domain,🎥 NETFLIX                    # Netflix 独立策略组
   - RULE-SET,paypal_domain,💶 PayPal                      # PayPal 独立策略组
-  - RULE-SET,proxylite,🚀 默认代理                         # 自定义 ProxyLite 走默认代理
   - RULE-SET,gfw_domain,🚀 默认代理                        # GFW 域名走默认代理
   - RULE-SET,geolocation-!cn,🚀 默认代理                   # 非中国域名优先代理，避免与宽泛 CN 集合交叉时被直连抢先
   - RULE-SET,cn_domain,🎯 直连                             # 其余中国域名走可切换直连
+  - RULE-SET,apple_ip,🍎 Apple 
   - RULE-SET,google_ip,🍀 Google,no-resolve               # Google IP 兜底
   - RULE-SET,netflix_ip,🎥 NETFLIX,no-resolve             # Netflix IP 兜底
   - RULE-SET,telegram_ip,📲 Telegram,no-resolve           # Telegram IP 兜底
@@ -223,8 +230,12 @@ rule-providers:
   sciencedirect_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/sciencedirect.mrs"}  # ScienceDirect
   elsevier_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/elsevier.mrs"}  # Elsevier
   clarivate_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/clarivate.mrs"}  # Clarivate
+  
   proxylite: {<<: *class, url: "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_RULE_REPO/refs/heads/main/ProxyLite.list"}  # 自定义 ProxyLite；请替换为自己的规则源
   adobeisdumb: {<<: *class, url: "https://raw.githubusercontent.com/ignaciocastro/a-dove-is-dumb/refs/heads/main/clash.yaml"}  # Adobe 屏蔽规则
+  bing_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/bing.mrs"}
+  msn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/msn.mrs"}
+  xbox_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/xbox.mrs"}
 
   
   private_ip: {<<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/private.mrs"}
