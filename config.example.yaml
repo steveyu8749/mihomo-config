@@ -132,7 +132,7 @@ proxy-groups:                                             # 所有可在客户�
     type: select                                          # 完全手工选择
     proxies: [🚀 默认代理, 直连]                           # 优先继承默认代理，也允许切换到可控直连组
 
-  - {<<: *service, name: 🤖 ChatGPT}                      # OpenAI / ChatGPT 独立策略组
+  - {<<: *service, name: 🤖 Ai}                      # OpenAI / ChatGPT 独立策略组
   - {<<: *service, name: 📹 YouTube}                      # YouTube 独立策略组
   - {<<: *service, name: 🍀 Google}                       # Google / Android FCM 独立策略组
   - {<<: *service, name: 👨🏿‍💻 GitHub}                       # GitHub 独立策略组
@@ -157,7 +157,7 @@ rules:                                                    # 实际流量分流�
   - PROCESS-NAME,com.microsoft.bing,🪟 Microsoft
   
   - RULE-SET,private_domain,直连                           # 私有域名硬直连
-  - RULE-SET,openai_domain,🤖 ChatGPT                     # OpenAI / ChatGPT 使用专用规则，避免误收其他 AI 服务
+  - RULE-SET,ai_domain,🤖 Ai                     # OpenAI / ChatGPT 使用专用规则，避免误收其他 AI 服务
   - RULE-SET,sciencedirect_domain,直连                  # ScienceDirect 直连
   - RULE-SET,elsevier_domain,直连                       # Elsevier 直连
   - RULE-SET,clarivate_domain,直连                      # Clarivate 直连
@@ -198,7 +198,7 @@ rules:                                                    # 实际流量分流�
 rule-anchor:
   ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs}
   domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}
-  domaintxt: &domain {type: http, interval: 86400, behavior: domain, format: text}
+  domaintxt: &domaintxt {type: http, interval: 86400, behavior: domain, format: text}
   class: &class {type: http, interval: 86400, behavior: classical, format: text}
   yaml: &yaml {type: http, interval: 18000, behavior: classical, format: yaml}  
 
@@ -213,7 +213,7 @@ rule-providers:
       - "+.market.xiaomi.com"                             # 小米应用商店兼容；仅改变 DNS 结果，不改变 DIRECT / PROXY 路由
 
   private_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}  # 私有域名，同时定义 &domain
-  ai: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs" }  # AI / ChatGPT 专用域名
+  ai_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/category-ai-!cn.mrs" }  # AI / ChatGPT 专用域名
   youtube_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}  # YouTube
   google_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}  # Google；包含 Google FCM 相关集合
   github_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"}  # GitHub
@@ -233,7 +233,7 @@ rule-providers:
   clarivate_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/clarivate.mrs"}  # Clarivate
   
   proxylite: {<<: *class, url: "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_RULE_REPO/refs/heads/main/ProxyLite.list"}  # 自定义 ProxyLite；请替换为自己的规则源
-  adobeisdumb: {<<: *class, url: "https://raw.githubusercontent.com/ignaciocastro/a-dove-is-dumb/refs/heads/main/clash.yaml"}  # Adobe 屏蔽规则
+  adobeisdumb: {<<: *yaml, url: "https://raw.githubusercontent.com/ignaciocastro/a-dove-is-dumb/refs/heads/main/clash.yaml"}  # Adobe 屏蔽规则
   bing_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/bing.mrs"}
   msn_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/msn.mrs"}
   xbox_domain: { <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/refs/heads/meta/geo/geosite/xbox.mrs"}
