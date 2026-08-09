@@ -12,7 +12,7 @@ from yaml.nodes import MappingNode
 from yaml.resolver import BaseResolver
 
 
-TEMPLATE_VERSION = "V4.14"
+TEMPLATE_VERSION = "V4.15"
 PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 DEFAULT_PROXY = "🚀 默认代理"
 HARD_DIRECT = "直连"
@@ -99,6 +99,13 @@ CUSTOM_DOMAIN_PROVIDER_PATHS = {
 
 CUSTOM_IP_PROVIDER_PATHS = {
     "proxy_ip": "rules/ProxyIP.list",
+}
+
+GENERATED_MRS_PATHS = {
+    "Direct.mrs": "mrs/Direct.mrs",
+    "FakeIPFilter.mrs": "mrs/FakeIPFilter.mrs",
+    "ProxyLite.mrs": "mrs/ProxyLite.mrs",
+    "ProxyIP.mrs": "mrs/ProxyIP.mrs",
 }
 
 REQUIRED_FAKEIP_COMPAT = {
@@ -459,14 +466,15 @@ def validate_rule_providers(
     for name, path in CUSTOM_DOMAIN_PROVIDER_PATHS.items():
         provider = providers.get(name)
         if not isinstance(provider, dict):
-            fail(errors, f"missing maintained domain text rule-provider: {name}")
+            fail(errors, f"missing generated domain MRS rule-provider: {name}")
             continue
+        generated_path = f"mrs/{Path(path).stem}.mrs"
         expected = {
             "type": "http",
             "interval": 86400,
             "behavior": "domain",
-            "format": "text",
-            "url": expected_custom_provider_url(path),
+            "format": "mrs",
+            "url": expected_custom_provider_url(generated_path),
         }
         for key, value in expected.items():
             if provider.get(key) != value:
@@ -477,14 +485,15 @@ def validate_rule_providers(
     for name, path in CUSTOM_IP_PROVIDER_PATHS.items():
         provider = providers.get(name)
         if not isinstance(provider, dict):
-            fail(errors, f"missing maintained IP text rule-provider: {name}")
+            fail(errors, f"missing generated IP MRS rule-provider: {name}")
             continue
+        generated_path = f"mrs/{Path(path).stem}.mrs"
         expected = {
             "type": "http",
             "interval": 86400,
             "behavior": "ipcidr",
-            "format": "text",
-            "url": expected_custom_provider_url(path),
+            "format": "mrs",
+            "url": expected_custom_provider_url(generated_path),
         }
         for key, value in expected.items():
             if provider.get(key) != value:
@@ -612,6 +621,30 @@ def validate_maintained_rule_files(root: Path, errors: list[str]) -> None:
             errors,
             f"rules/ProxyIP.list must contain exactly the {len(REQUIRED_PROXY_IPS)} audited proxy IP entries",
         )
+
+
+def validate_generated_mrs_files(root: Path, errors: list[str]) -> None:
+    expected_names = set(GENERATED_MRS_PATHS)
+    mrs_directory = root / "mrs"
+    if not mrs_directory.is_dir():
+        fail(errors, "generated MRS directory is missing: mrs/")
+        return
+
+    actual_names = {path.name for path in mrs_directory.glob("*.mrs")}
+    if actual_names != expected_names:
+        fail(
+            errors,
+            "mrs/ must contain exactly the four generated outputs: "
+            + ", ".join(sorted(expected_names)),
+        )
+
+    for name, relative_path in GENERATED_MRS_PATHS.items():
+        path = root / relative_path
+        if not path.is_file():
+            continue
+        payload = path.read_bytes()
+        if len(payload) < 16 or not payload.startswith(b"\x28\xb5\x2f\xfd"):
+            fail(errors, f"generated MRS output is not a valid zstd-framed file: {name}")
 
 
 def validate_proxy_providers(
@@ -1087,6 +1120,7 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
         "rules/FakeIPFilter.list": root / "rules/FakeIPFilter.list",
         "rules/ProxyLite.list": root / "rules/ProxyLite.list",
         "rules/ProxyIP.list": root / "rules/ProxyIP.list",
+        **{path: root / path for path in GENERATED_MRS_PATHS.values()},
     }
     if not (root / "README.md").is_file():
         return
@@ -1101,6 +1135,7 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
     workflow = required_files[".github/workflows/validate.yml"].read_text(encoding="utf-8")
 
     validate_maintained_rule_files(root, errors)
+    validate_generated_mrs_files(root, errors)
 
     if TEMPLATE_VERSION not in readme:
         fail(errors, f"README must identify the current template as {TEMPLATE_VERSION}")
@@ -1121,6 +1156,7 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
         "FakeIPFilter.list": "maintained Fake-IP compatibility list",
         "ProxyLite.list": "maintained proxy-domain list",
         "ProxyIP.list": "maintained proxy-IP list",
+        "mrs/": "generated MRS directory",
     }
     for text, topic in required_readme_topics.items():
         if text not in readme:
@@ -1136,6 +1172,26 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
     for changed_path in ("README.md", "CHANGELOG.md", "docs/design-notes.md", "rules/**"):
         if workflow.count(f'"{changed_path}"') < 2:
             fail(errors, f"workflow path filters must validate changes to {changed_path}")
+
+    required_mrs_workflow_fragments = {
+        "publish-mrs:": "generated MRS publishing job",
+        "needs: validate": "validation dependency for generated MRS publishing",
+        "contents: write": "job-scoped permission for generated MRS publishing",
+        "github.event_name != 'pull_request'": "read-only pull request boundary",
+        "github.ref == 'refs/heads/main'": "main-only generated MRS publishing boundary",
+        'rules/Direct.list" "${GITHUB_WORKSPACE}/mrs/Direct.mrs': "Direct MRS output",
+        'rules/FakeIPFilter.list" "${GITHUB_WORKSPACE}/mrs/FakeIPFilter.mrs': "Fake-IP MRS output",
+        'rules/ProxyLite.list" "${GITHUB_WORKSPACE}/mrs/ProxyLite.mrs': "ProxyLite MRS output",
+        'convert-ruleset ipcidr text "${GITHUB_WORKSPACE}/rules/ProxyIP.list" "${GITHUB_WORKSPACE}/mrs/ProxyIP.mrs': "ProxyIP MRS output",
+        'git commit -m "Update generated MRS rules"': "generated-only commit",
+    }
+    for fragment, purpose in required_mrs_workflow_fragments.items():
+        if fragment not in workflow:
+            fail(errors, f"workflow is missing the {purpose}")
+    if workflow.count("contents: write") != 1:
+        fail(errors, "workflow must grant contents:write only to the generated MRS publishing job")
+    if '"mrs/**"' in workflow:
+        fail(errors, "mrs/** must not trigger the workflow and create a generation loop")
 
 
 def main() -> int:
@@ -1182,11 +1238,9 @@ def main() -> int:
     expected_anchor_shapes = {
         "ip": {"type": "http", "interval": 86400, "behavior": "ipcidr", "format": "mrs"},
         "domain": {"type": "http", "interval": 86400, "behavior": "domain", "format": "mrs"},
-        "domaintxt": {"type": "http", "interval": 86400, "behavior": "domain", "format": "text"},
-        "iptxt": {"type": "http", "interval": 86400, "behavior": "ipcidr", "format": "text"},
     }
     if anchors != expected_anchor_shapes:
-        fail(errors, "rule-anchor must contain exactly the audited ip, domain, domaintxt and iptxt templates")
+        fail(errors, "rule-anchor must contain exactly the audited ip and domain MRS templates")
 
     validate_proxy_providers(proxy_providers, errors)
     validate_rule_providers(providers, raw, errors)

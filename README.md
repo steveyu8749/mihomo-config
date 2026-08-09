@@ -2,7 +2,7 @@
 
 [![Validate Mihomo template](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml/badge.svg)](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml)
 
-一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.14**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
+一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.15**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
 
 这不是机场订阅转换模板，也不是自动测速方案。节点由用户手工选择，配置专注于分流语义和跨客户端一致性。
 
@@ -14,7 +14,7 @@
 | DNS | 国内 DoH + Fake-IP | 降低污染影响，同时保留少量 Real-IP 兼容项 |
 | TUN | `stack: mixed` | 兼顾桌面与移动端的兼容性 |
 | Sniffer | 识别域名，不覆盖目标 | 补足少数缺失域名的连接信息，不改变实际连接地址 |
-| 规则数据 | 公共 MRS + 自维护文本 Provider | 不依赖客户端内置 GeoData，并让个人例外保持可审计 |
+| 规则数据 | 公共 MRS + Actions 生成的自维护 MRS | 不依赖客户端 GeoData，同时保留可审计的文本源 |
 | 节点选择 | 手工 `select` | 不维护地区筛选、自动测速或故障转移组 |
 | 使用边界 | 仅本机，`allow-lan: false` | 不把代理端口暴露给局域网其他设备 |
 
@@ -44,7 +44,7 @@ Fake-IP / Real-IP 只决定 DNS 返回什么地址；DIRECT / PROXY 只由 `rule
 1. 下载 [`config.example.yaml`](./config.example.yaml)。
 2. 将 `Provider_A`、`Provider_B`、`Provider_C` 中的 `订阅url` 替换为自己的订阅地址；不需要的 Provider 可以删除。
 3. 按需维护 [`rules/Direct.list`](./rules/Direct.list) 与 [`rules/FakeIPFilter.list`](./rules/FakeIPFilter.list)；不需要个人扩展时直接使用仓库默认内容。
-4. 代理补充项直接维护当前仓库的 [`rules/ProxyLite.list`](./rules/ProxyLite.list) 和 [`rules/ProxyIP.list`](./rules/ProxyIP.list)，不再需要替换外部占位 URL。
+4. 代理补充项直接维护当前仓库的 [`rules/ProxyLite.list`](./rules/ProxyLite.list) 和 [`rules/ProxyIP.list`](./rules/ProxyIP.list)，推送到 `main` 后 Actions 会自动更新对应 MRS。
 5. 将配置导入客户端并启用 TUN。
 6. 在 `🚀 默认代理` 中选择一个实际代理节点；其他业务组默认继承它，也可以单独切换为硬直连。
 7. 查看客户端的最终配置，确认没有被全局覆写脚本改掉 DNS、TUN 或策略组设置。
@@ -203,7 +203,7 @@ MetaCubeX 的 `private.mrs` 包含 `198.18.0.0/15`，而默认 Fake-IP 池 `198.
 
 ### `cache-algorithm`
 
-Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.14 不显式设置 `cache-algorithm`，继续使用默认 LRU。
+Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.15 不显式设置 `cache-algorithm`，继续使用默认 LRU。
 
 ARC 并不等于无条件更快。没有观测到 DNS 缓存频繁抖动、也没有针对设备内存与访问模式做测量时，增加该参数只会扩大配置变量，难以证明实际收益。如果以后有明确的缓存命中问题，可以单独测试：
 
@@ -228,7 +228,7 @@ HTTP Host、TLS SNI 与 QUIC 握手信息只用于补充域名识别和规则匹
 
 ## 分流规则
 
-Mihomo 从上到下匹配，命中后停止。V4.14 的顺序是：
+Mihomo 从上到下匹配，命中后停止。V4.15 的顺序是：
 
 1. 私有域名与私有 IP；
 2. 进程规则；
@@ -357,16 +357,18 @@ PROCESS-NAME-REGEX,正则表达式,目标策略组
 | --- | --- |
 | 公共域名集合 | `behavior: domain` + `format: mrs` |
 | 服务 / 中国 IP | `behavior: ipcidr` + `format: mrs` |
-| 自维护 Direct | `behavior: domain` + `format: text` |
-| 自维护 ProxyLite | `behavior: domain` + `format: text` |
-| 自维护 ProxyIP | `behavior: ipcidr` + `format: text` |
-| Fake-IP 兼容集合 | `behavior: domain` + `format: text` |
+| 自维护 Direct | `domain text` 源 → `domain mrs` Provider |
+| 自维护 ProxyLite | `domain text` 源 → `domain mrs` Provider |
+| 自维护 ProxyIP | `ipcidr text` 源 → `ipcidr mrs` Provider |
+| Fake-IP 兼容集合 | `domain text` 源 → `domain mrs` Provider |
 
 HTTP Rule Provider 每 24 小时更新。模板没有给它们设置 `proxy`，因此不会强制固定 DIRECT 或某个代理组；更新请求作为 Mihomo 内部连接进入正常路由。已有规则数据时，下载域名会按当前规则选择出口；首次启动或缓存为空时，最终结果也会受当时已可用的规则与兜底策略影响。
 
 这与 Proxy Provider 不同：机场订阅需要先提供代理节点，所以模板为它明确设置硬直连，避免循环依赖。
 
-所有启用的 MetaCubeX MRS URL 已在本次 V4.14 复审中检查存在性，格式与声明的 `behavior` 一致；Direct、Fake-IP Filter、ProxyLite 和 ProxyIP 四份自维护文本源会在 CI 中分别按 `domain` 或 `ipcidr` 转换为 MRS，验证语法和 Mihomo 核心可读性。仓库仍以可审阅的文本作为源文件，不在校验工作流中自动回写二进制产物。
+所有启用的 MetaCubeX MRS URL 已在本次 V4.15 复审中检查存在性，格式与声明的 `behavior` 一致；Direct、Fake-IP Filter、ProxyLite 和 ProxyIP 四份自维护文本源会在 CI 中分别按 `domain` 或 `ipcidr` 转换为 MRS，验证语法和 Mihomo 核心可读性。
+
+`rules/` 是唯一需要手工维护的源目录；[`mrs/`](./mrs/) 只保存由 GitHub Actions 生成、也是主配置实际下载的二进制产物。当 `main` 上的源规则通过策略校验、18 个故障注入测试和 Mihomo 真实核心检查后，独立的 `publish-mrs` job 才获得写权限，并仅在内容变化时提交四个 `.mrs` 文件。PR 始终保持只读，且 `mrs/` 不在工作流的触发路径中，因此生成提交不会引发循环。
 
 ## Adobe：默认完全关闭
 
@@ -439,6 +441,7 @@ GitHub Actions 会运行相同的仓库策略校验，并下载经过 GitHub 发
 | [`rules/FakeIPFilter.list`](./rules/FakeIPFilter.list) | 仅解决应用无法接受 Fake-IP 的 Real-IP 兼容项 |
 | [`rules/ProxyLite.list`](./rules/ProxyLite.list) | 必须进入默认代理的最小域名补充集 |
 | [`rules/ProxyIP.list`](./rules/ProxyIP.list) | 必须进入默认代理的精确 IP CIDR 补充集 |
+| [`mrs/`](./mrs/) | GitHub Actions 根据 `rules/` 自动生成的四份 MRS 产物，不手工编辑 |
 | [`scripts/validate_config.py`](./scripts/validate_config.py) | 仓库设计约束、引用完整性和脱敏检查 |
 | [`scripts/test_validator.py`](./scripts/test_validator.py) | 校验器故障注入与回归测试 |
 | [`.github/workflows/validate.yml`](./.github/workflows/validate.yml) | GitHub Actions 自动校验 |

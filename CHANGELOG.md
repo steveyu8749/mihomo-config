@@ -1,5 +1,12 @@
 # Changelog
 
+## V4.15
+
+- 新增由 GitHub Actions 维护的 `mrs/` 产物目录，自动生成 `Direct.mrs`、`FakeIPFilter.mrs`、`ProxyLite.mrs` 和 `ProxyIP.mrs`。
+- `rules/` 继续作为唯一可编辑源；四份产物分别使用 `domain` 或 `ipcidr` behavior，仅在内容变化时由 `github-actions[bot]` 提交，主配置的自维护 Rule Provider 同步切换为直接下载这些 MRS。
+- 自动发布 job 只在 `main` 推送或手动运行时启用，且必须等待仓库策略、故障注入与 Mihomo 核心校验全部通过；PR 阶段仍为只读。
+- 生成提交只修改 `mrs/`，该目录不在工作流触发路径中，避免 Actions 自触发循环。
+
 ## V4.14
 
 - 将已审核的 ProxyLite 正式纳入当前仓库，`config.example.yaml` 不再依赖旧仓库或占位 URL。

@@ -111,3 +111,83 @@ jobs:
           "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/ProxyLite.list" "${workdir}/ProxyLite.mrs"
           "${MIHOMO_BIN}" convert-ruleset ipcidr text "${GITHUB_WORKSPACE}/rules/ProxyIP.list" "${workdir}/ProxyIP.mrs"
           timeout 120s "${MIHOMO_BIN}" -t -d "${workdir}" -f "${GITHUB_WORKSPACE}/config.example.yaml"
+
+  publish-mrs:
+    name: Publish generated MRS
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install pinned Mihomo core
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          asset="mihomo-linux-amd64-${MIHOMO_VERSION}.gz"
+          release_json="${RUNNER_TEMP}/mihomo-release.json"
+          archive="${RUNNER_TEMP}/${asset}"
+          binary="${RUNNER_TEMP}/mihomo"
+
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-delay 2 \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/MetaCubeX/mihomo/releases/tags/${MIHOMO_VERSION}" \
+            > "${release_json}"
+
+          url="$(jq -r --arg name "${asset}" '.assets[] | select(.name == $name) | .browser_download_url' "${release_json}")"
+          digest="$(jq -r --arg name "${asset}" '.assets[] | select(.name == $name) | .digest // empty' "${release_json}")"
+
+          if [[ -z "${url}" || "${url}" == "null" ]]; then
+            echo "Release asset not found: ${asset}" >&2
+            exit 1
+          fi
+          if [[ "${digest}" != sha256:* ]]; then
+            echo "GitHub did not provide a SHA-256 digest for ${asset}" >&2
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-delay 2 \
+            "${url}" -o "${archive}"
+
+          printf '%s  %s\n' "${digest#sha256:}" "${archive}" | sha256sum --check --strict
+          gzip --decompress --stdout "${archive}" > "${binary}"
+          chmod +x "${binary}"
+          "${binary}" -v
+          echo "MIHOMO_BIN=${binary}" >> "${GITHUB_ENV}"
+
+      - name: Generate MRS files
+        run: |
+          set -euo pipefail
+          mkdir -p "${GITHUB_WORKSPACE}/mrs"
+          "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/Direct.list" "${GITHUB_WORKSPACE}/mrs/Direct.mrs"
+          "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/FakeIPFilter.list" "${GITHUB_WORKSPACE}/mrs/FakeIPFilter.mrs"
+          "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/ProxyLite.list" "${GITHUB_WORKSPACE}/mrs/ProxyLite.mrs"
+          "${MIHOMO_BIN}" convert-ruleset ipcidr text "${GITHUB_WORKSPACE}/rules/ProxyIP.list" "${GITHUB_WORKSPACE}/mrs/ProxyIP.mrs"
+
+      - name: Commit generated MRS files
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- mrs/ && [[ -z "$(git ls-files --others --exclude-standard -- mrs/)" ]]; then
+            echo "Generated MRS files are already up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mrs/Direct.mrs mrs/FakeIPFilter.mrs mrs/ProxyLite.mrs mrs/ProxyIP.mrs
+          git commit -m "Update generated MRS rules"
+          git push origin HEAD:main
