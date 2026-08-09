@@ -225,6 +225,18 @@ TEST_CASES: list[tuple[str, str, Callable[[str], str], str]] = [
         lambda text: text + "\nDOMAIN-SUFFIX,example.com\n",
         "is not a domain behavior text rule",
     ),
+    (
+        "classical syntax in ProxyLite domain list",
+        "rules/ProxyLite.list",
+        lambda text: text + "\nDOMAIN-SUFFIX,example.com\n",
+        "is not a domain behavior text rule",
+    ),
+    (
+        "domain syntax in ProxyIP CIDR list",
+        "rules/ProxyIP.list",
+        lambda text: text + "\nDOMAIN-SUFFIX,example.com\n",
+        "is not an IP CIDR behavior text rule",
+    ),
 ]
 
 

@@ -108,4 +108,6 @@ jobs:
           mkdir -p "${workdir}"
           "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/Direct.list" "${workdir}/Direct.mrs"
           "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/FakeIPFilter.list" "${workdir}/FakeIPFilter.mrs"
+          "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/ProxyLite.list" "${workdir}/ProxyLite.mrs"
+          "${MIHOMO_BIN}" convert-ruleset ipcidr text "${GITHUB_WORKSPACE}/rules/ProxyIP.list" "${workdir}/ProxyIP.mrs"
           timeout 120s "${MIHOMO_BIN}" -t -d "${workdir}" -f "${GITHUB_WORKSPACE}/config.example.yaml"

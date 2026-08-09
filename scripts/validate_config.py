@@ -12,7 +12,7 @@ from yaml.nodes import MappingNode
 from yaml.resolver import BaseResolver
 
 
-TEMPLATE_VERSION = "V4.13"
+TEMPLATE_VERSION = "V4.14"
 PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 DEFAULT_PROXY = "🚀 默认代理"
 HARD_DIRECT = "直连"
@@ -94,6 +94,11 @@ IP_PROVIDER_PATHS = {
 CUSTOM_DOMAIN_PROVIDER_PATHS = {
     "direct_domain": "rules/Direct.list",
     "fakeip_compat": "rules/FakeIPFilter.list",
+    "proxylite": "rules/ProxyLite.list",
+}
+
+CUSTOM_IP_PROVIDER_PATHS = {
+    "proxy_ip": "rules/ProxyIP.list",
 }
 
 REQUIRED_FAKEIP_COMPAT = {
@@ -147,6 +152,21 @@ REQUIRED_DIRECT_DOMAINS = {
     "+.wiley.com",
 }
 
+REQUIRED_PROXYLITE_DOMAINS = {
+    "+.qichiyu.com",
+    "+.mojie.me",
+    "+.smartasset.com",
+    "+.lendingtree.com",
+    "+.adjust.com",
+    "+.bajie1.com",
+    "+.bajiexinxi.net",
+}
+
+REQUIRED_PROXY_IPS = {
+    "142.171.133.131/32",
+    "103.115.43.2/32",
+}
+
 REQUIRED_RULES = {
     "RULE-SET,private_domain,直连",
     "RULE-SET,private_ip,直连,no-resolve",
@@ -171,6 +191,8 @@ REQUIRED_RULES = {
     "RULE-SET,telegram_domain,📲 Telegram",
     "RULE-SET,netflix_domain,🎥 NETFLIX",
     "RULE-SET,paypal_domain,💶 PayPal",
+    "RULE-SET,proxylite,🚀 默认代理",
+    "RULE-SET,proxy_ip,🚀 默认代理,no-resolve",
     "RULE-SET,gfw_domain,🚀 默认代理",
     "RULE-SET,geolocation-!cn,🚀 默认代理",
     "RULE-SET,cn_domain,直连",
@@ -190,6 +212,8 @@ RULE_ORDER = [
     ("RULE-SET,github_domain,", "RULE-SET,microsoft_domain,", "github_domain must appear before microsoft_domain"),
     ("RULE-SET,youtube_domain,", "RULE-SET,google_domain,", "youtube_domain must appear before google_domain"),
     ("DOMAIN-SUFFIX,push.apple.com,", "RULE-SET,apple_domain,", "push.apple.com must appear before apple_domain"),
+    ("RULE-SET,proxylite,", "RULE-SET,proxy_ip,", "proxylite domain rules must appear before proxy_ip"),
+    ("RULE-SET,proxy_ip,", "RULE-SET,gfw_domain,", "proxy_ip must appear before gfw_domain"),
     ("RULE-SET,geolocation-!cn,", "RULE-SET,cn_domain,", "geolocation-!cn must appear before cn_domain"),
 ]
 
@@ -450,24 +474,23 @@ def validate_rule_providers(
         if "proxy" in provider:
             fail(errors, f"rule-provider {name!r} must not force a fixed download proxy")
 
-    proxylite = providers.get("proxylite")
-    if proxylite is not None:
-        if not isinstance(proxylite, dict):
-            fail(errors, "proxylite rule-provider must be a mapping")
-        else:
-            expected = {
-                "type": "http",
-                "interval": 86400,
-                "behavior": "classical",
-                "format": "text",
-            }
-            for key, value in expected.items():
-                if proxylite.get(key) != value:
-                    fail(errors, f"proxylite must use {key}: {value!r}")
-            if not is_placeholder_url(str(proxylite.get("url", ""))):
-                fail(errors, "proxylite URL must remain a sanitized placeholder in the public template")
-            if "proxy" in proxylite:
-                fail(errors, "proxylite must not force a fixed download proxy")
+    for name, path in CUSTOM_IP_PROVIDER_PATHS.items():
+        provider = providers.get(name)
+        if not isinstance(provider, dict):
+            fail(errors, f"missing maintained IP text rule-provider: {name}")
+            continue
+        expected = {
+            "type": "http",
+            "interval": 86400,
+            "behavior": "ipcidr",
+            "format": "text",
+            "url": expected_custom_provider_url(path),
+        }
+        for key, value in expected.items():
+            if provider.get(key) != value:
+                fail(errors, f"rule-provider {name!r} must use {key}: {value!r}")
+        if "proxy" in provider:
+            fail(errors, f"rule-provider {name!r} must not force a fixed download proxy")
 
     if "adobeisdumb" in providers:
         fail(errors, "Adobe provider must remain disabled in the shared mobile/desktop template")
@@ -517,11 +540,46 @@ def read_domain_text_rules(path: Path, label: str, errors: list[str]) -> list[st
     return rules
 
 
+def read_ipcidr_text_rules(path: Path, label: str, errors: list[str]) -> list[str]:
+    if not path.is_file():
+        fail(errors, f"repository rule file missing: {path.as_posix()}")
+        return []
+
+    rules: list[str] = []
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), 1
+    ):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if any(character.isspace() for character in line) or "," in line or "://" in line:
+            fail(errors, f"{label}:{line_number} is not an IP CIDR behavior text rule: {line!r}")
+            continue
+        try:
+            network = ipaddress.ip_network(line, strict=True)
+        except ValueError:
+            fail(errors, f"{label}:{line_number} is not a valid IP CIDR rule: {line!r}")
+            continue
+        if str(network) != line:
+            fail(errors, f"{label}:{line_number} must use normalized CIDR notation: {line!r}")
+            continue
+        rules.append(line)
+
+    duplicates = sorted({rule for rule in rules if rules.count(rule) > 1})
+    if duplicates:
+        fail(errors, f"{label} contains duplicate IP CIDR rules: {', '.join(duplicates)}")
+    return rules
+
+
 def validate_maintained_rule_files(root: Path, errors: list[str]) -> None:
     direct_path = root / CUSTOM_DOMAIN_PROVIDER_PATHS["direct_domain"]
     fakeip_path = root / CUSTOM_DOMAIN_PROVIDER_PATHS["fakeip_compat"]
+    proxylite_path = root / CUSTOM_DOMAIN_PROVIDER_PATHS["proxylite"]
+    proxy_ip_path = root / CUSTOM_IP_PROVIDER_PATHS["proxy_ip"]
     direct_rules = read_domain_text_rules(direct_path, "rules/Direct.list", errors)
     fakeip_rules = read_domain_text_rules(fakeip_path, "rules/FakeIPFilter.list", errors)
+    proxylite_rules = read_domain_text_rules(proxylite_path, "rules/ProxyLite.list", errors)
+    proxy_ip_rules = read_ipcidr_text_rules(proxy_ip_path, "rules/ProxyIP.list", errors)
 
     missing_direct = REQUIRED_DIRECT_DOMAINS - set(direct_rules)
     if missing_direct:
@@ -537,6 +595,22 @@ def validate_maintained_rule_files(root: Path, errors: list[str]) -> None:
         fail(
             errors,
             f"rules/FakeIPFilter.list must contain exactly the {len(REQUIRED_FAKEIP_COMPAT)} audited compatibility entries",
+        )
+
+    if set(proxylite_rules) != REQUIRED_PROXYLITE_DOMAINS or len(
+        proxylite_rules
+    ) != len(REQUIRED_PROXYLITE_DOMAINS):
+        fail(
+            errors,
+            f"rules/ProxyLite.list must contain exactly the {len(REQUIRED_PROXYLITE_DOMAINS)} audited proxy-domain entries",
+        )
+
+    if set(proxy_ip_rules) != REQUIRED_PROXY_IPS or len(proxy_ip_rules) != len(
+        REQUIRED_PROXY_IPS
+    ):
+        fail(
+            errors,
+            f"rules/ProxyIP.list must contain exactly the {len(REQUIRED_PROXY_IPS)} audited proxy IP entries",
         )
 
 
@@ -743,6 +817,17 @@ def validate_rules(
             broad_index = find_rule(rules, prefix)
             if broad_index is not None and proxylite_index > broad_index:
                 fail(errors, f"proxylite must appear before broad rule {prefix!r}")
+
+    proxy_ip_index = find_rule(rules, "RULE-SET,proxy_ip,")
+    if ("proxy_ip" in providers) != (proxy_ip_index is not None):
+        fail(errors, "proxy_ip routing rule and provider must be enabled or removed together")
+    if proxylite_index is not None and proxy_ip_index is not None:
+        if proxy_ip_index != proxylite_index + 1:
+            fail(errors, "proxy_ip must immediately follow proxylite")
+        for prefix in ("RULE-SET,gfw_domain,", "RULE-SET,geolocation-!cn,", "RULE-SET,cn_domain,"):
+            broad_index = find_rule(rules, prefix)
+            if broad_index is not None and proxy_ip_index > broad_index:
+                fail(errors, f"proxy_ip must appear before broad rule {prefix!r}")
 
     direct_index = find_rule(rules, "RULE-SET,direct_domain,")
     if direct_index is not None:
@@ -1000,6 +1085,8 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
         ".github/workflows/validate.yml": root / ".github/workflows/validate.yml",
         "rules/Direct.list": root / "rules/Direct.list",
         "rules/FakeIPFilter.list": root / "rules/FakeIPFilter.list",
+        "rules/ProxyLite.list": root / "rules/ProxyLite.list",
+        "rules/ProxyIP.list": root / "rules/ProxyIP.list",
     }
     if not (root / "README.md").is_file():
         return
@@ -1032,6 +1119,8 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
         "NTP": "NTP Fake-IP exception decision",
         "Direct.list": "maintained direct-domain list",
         "FakeIPFilter.list": "maintained Fake-IP compatibility list",
+        "ProxyLite.list": "maintained proxy-domain list",
+        "ProxyIP.list": "maintained proxy-IP list",
     }
     for text, topic in required_readme_topics.items():
         if text not in readme:
@@ -1094,10 +1183,10 @@ def main() -> int:
         "ip": {"type": "http", "interval": 86400, "behavior": "ipcidr", "format": "mrs"},
         "domain": {"type": "http", "interval": 86400, "behavior": "domain", "format": "mrs"},
         "domaintxt": {"type": "http", "interval": 86400, "behavior": "domain", "format": "text"},
-        "class": {"type": "http", "interval": 86400, "behavior": "classical", "format": "text"},
+        "iptxt": {"type": "http", "interval": 86400, "behavior": "ipcidr", "format": "text"},
     }
     if anchors != expected_anchor_shapes:
-        fail(errors, "rule-anchor must contain exactly the audited ip, domain, domaintxt and class templates")
+        fail(errors, "rule-anchor must contain exactly the audited ip, domain, domaintxt and iptxt templates")
 
     validate_proxy_providers(proxy_providers, errors)
     validate_rule_providers(providers, raw, errors)

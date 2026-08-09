@@ -1,5 +1,13 @@
 # Changelog
 
+## V4.14
+
+- 将已审核的 ProxyLite 正式纳入当前仓库，`config.example.yaml` 不再依赖旧仓库或占位 URL。
+- 将 7 条域名后缀保存为 `rules/ProxyLite.list` domain text，将 2 条精确 `/32` 地址拆分为 `rules/ProxyIP.list` ipcidr text；两者都可直接转换为 MRS。
+- `proxy_ip` 路由使用 `no-resolve` 并紧跟 ProxyLite，保留原有代理语义，同时避免为精确 IP 规则主动解析域名。
+- 启用中的自维护规则统一为 `domain` 或 `ipcidr` text；Adobe 仍是唯一保留的 classical YAML 例外，且默认注释。
+- CI 新增 ProxyLite 与 ProxyIP 的 text → MRS 真实核心转换，校验器和 18 个故障注入测试同步覆盖新格式。
+
 ## V4.13
 
 - 将机场 Provider 健康检查从 600 秒调整为 1800 秒，并显式启用 `lazy: true`；手工选点场景减少约三分之二的周期探测，不改变订阅刷新、当前节点或分流结果。

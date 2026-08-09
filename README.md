@@ -2,7 +2,7 @@
 
 [![Validate Mihomo template](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml/badge.svg)](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml)
 
-一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.13**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
+一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.14**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
 
 这不是机场订阅转换模板，也不是自动测速方案。节点由用户手工选择，配置专注于分流语义和跨客户端一致性。
 
@@ -44,7 +44,7 @@ Fake-IP / Real-IP 只决定 DNS 返回什么地址；DIRECT / PROXY 只由 `rule
 1. 下载 [`config.example.yaml`](./config.example.yaml)。
 2. 将 `Provider_A`、`Provider_B`、`Provider_C` 中的 `订阅url` 替换为自己的订阅地址；不需要的 Provider 可以删除。
 3. 按需维护 [`rules/Direct.list`](./rules/Direct.list) 与 [`rules/FakeIPFilter.list`](./rules/FakeIPFilter.list)；不需要个人扩展时直接使用仓库默认内容。
-4. 处理 `proxylite`：有自定义规则就替换占位地址；没有就同时删除对应路由规则与 Rule Provider。
+4. 代理补充项直接维护当前仓库的 [`rules/ProxyLite.list`](./rules/ProxyLite.list) 和 [`rules/ProxyIP.list`](./rules/ProxyIP.list)，不再需要替换外部占位 URL。
 5. 将配置导入客户端并启用 TUN。
 6. 在 `🚀 默认代理` 中选择一个实际代理节点；其他业务组默认继承它，也可以单独切换为硬直连。
 7. 查看客户端的最终配置，确认没有被全局覆写脚本改掉 DNS、TUN 或策略组设置。
@@ -203,7 +203,7 @@ MetaCubeX 的 `private.mrs` 包含 `198.18.0.0/15`，而默认 Fake-IP 池 `198.
 
 ### `cache-algorithm`
 
-Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.13 不显式设置 `cache-algorithm`，继续使用默认 LRU。
+Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.14 不显式设置 `cache-algorithm`，继续使用默认 LRU。
 
 ARC 并不等于无条件更快。没有观测到 DNS 缓存频繁抖动、也没有针对设备内存与访问模式做测量时，增加该参数只会扩大配置变量，难以证明实际收益。如果以后有明确的缓存命中问题，可以单独测试：
 
@@ -228,13 +228,13 @@ HTTP Host、TLS SNI 与 QUIC 握手信息只用于补充域名识别和规则匹
 
 ## 分流规则
 
-Mihomo 从上到下匹配，命中后停止。V4.13 的顺序是：
+Mihomo 从上到下匹配，命中后停止。V4.14 的顺序是：
 
 1. 私有域名与私有 IP；
 2. 进程规则；
 3. 具体业务域名；
 4. 自维护 Direct；
-5. 自定义 ProxyLite；
+5. 自维护 ProxyLite 域名和精确 Proxy IP；
 6. GFW、非中国与中国域名；
 7. 业务 IP 兜底；
 8. 中国 IP 兜底；
@@ -253,6 +253,17 @@ Mihomo 从上到下匹配，命中后停止。V4.13 的顺序是：
 ProxyLite 位于所有专用业务域名之后、GFW / 地域规则之前。自定义规则集的内容由用户维护，范围可能很宽；如果它放在前面，可能抢先命中 Bing、OneDrive、GitHub、Microsoft、Apple 等域名，使专用策略组失效。
 
 ProxyLite 只应保留“必须固定进入默认代理、且现有专用或地域规则不能表达”的个人例外。Bing Rewards、Clarity、Google DNS 等已经由 Bing、Microsoft、Google、GFW 或非中国集合接管的项目不应重复加入；`DOMAIN-KEYWORD` 也应尽量替换为明确后缀，避免一个短词意外覆盖无关域名。
+
+### 自维护 ProxyLite
+
+[`rules/ProxyLite.list`](./rules/ProxyLite.list) 使用 `behavior: domain` 与 `format: text`，当前保留 7 条经过收窄的域名后缀。原 ProxyLite 中的两个精确地址不是域名，因此单独保存在 [`rules/ProxyIP.list`](./rules/ProxyIP.list)，使用 `behavior: ipcidr` 与 `format: text`：
+
+```yaml
+- RULE-SET,proxylite,🚀 默认代理
+- RULE-SET,proxy_ip,🚀 默认代理,no-resolve
+```
+
+`no-resolve` 使这两条 `/32` 规则只检查连接已有的真实目标 IP，不会为了匹配它们额外解析域名。MRS 只支持 `domain` 和 `ipcidr` behavior，所以这种拆分既保留原语义，也让两份文本都能直接转换为 MRS。
 
 ### 自维护 Direct
 
@@ -347,14 +358,15 @@ PROCESS-NAME-REGEX,正则表达式,目标策略组
 | 公共域名集合 | `behavior: domain` + `format: mrs` |
 | 服务 / 中国 IP | `behavior: ipcidr` + `format: mrs` |
 | 自维护 Direct | `behavior: domain` + `format: text` |
-| 自定义 ProxyLite | `behavior: classical` + `format: text` |
+| 自维护 ProxyLite | `behavior: domain` + `format: text` |
+| 自维护 ProxyIP | `behavior: ipcidr` + `format: text` |
 | Fake-IP 兼容集合 | `behavior: domain` + `format: text` |
 
 HTTP Rule Provider 每 24 小时更新。模板没有给它们设置 `proxy`，因此不会强制固定 DIRECT 或某个代理组；更新请求作为 Mihomo 内部连接进入正常路由。已有规则数据时，下载域名会按当前规则选择出口；首次启动或缓存为空时，最终结果也会受当时已可用的规则与兜底策略影响。
 
 这与 Proxy Provider 不同：机场订阅需要先提供代理节点，所以模板为它明确设置硬直连，避免循环依赖。
 
-所有启用的 MetaCubeX MRS URL 已在本次 V4.13 复审中检查存在性，格式与声明的 `behavior` 一致；两个自维护文本列表会在 CI 中额外转换为 MRS，以验证 Mihomo 能实际解析。
+所有启用的 MetaCubeX MRS URL 已在本次 V4.14 复审中检查存在性，格式与声明的 `behavior` 一致；Direct、Fake-IP Filter、ProxyLite 和 ProxyIP 四份自维护文本源会在 CI 中分别按 `domain` 或 `ipcidr` 转换为 MRS，验证语法和 Mihomo 核心可读性。仓库仍以可审阅的文本作为源文件，不在校验工作流中自动回写二进制产物。
 
 ## Adobe：默认完全关闭
 
@@ -403,7 +415,7 @@ python3 scripts/validate_config.py config.example.yaml
 - YAML 重复键、顶层字段与公开模板脱敏；
 - 策略组、规则目标和 Rule Provider 引用完整性；
 - MRS Provider 的类型、格式、URL 与更新周期；
-- 自维护 Direct / Fake-IP 文本列表的语法、重复项和必要条目；
+- 自维护 Direct / Fake-IP / ProxyLite / ProxyIP 文本列表的语法、重复项和必要条目；
 - ProxyLite、Microsoft、Google、Apple 和 IP 兜底的关键顺序；
 - DNS、TUN、Sniffer 与进程匹配约束；
 - 配置中每个活动字段是否带说明注释；
@@ -425,6 +437,8 @@ GitHub Actions 会运行相同的仓库策略校验，并下载经过 GitHub 发
 | [`config.example.yaml`](./config.example.yaml) | 公开、脱敏、逐字段注释的主配置模板 |
 | [`rules/Direct.list`](./rules/Direct.list) | 明确需要硬直连的最小域名例外，含合并后的科研资源 |
 | [`rules/FakeIPFilter.list`](./rules/FakeIPFilter.list) | 仅解决应用无法接受 Fake-IP 的 Real-IP 兼容项 |
+| [`rules/ProxyLite.list`](./rules/ProxyLite.list) | 必须进入默认代理的最小域名补充集 |
+| [`rules/ProxyIP.list`](./rules/ProxyIP.list) | 必须进入默认代理的精确 IP CIDR 补充集 |
 | [`scripts/validate_config.py`](./scripts/validate_config.py) | 仓库设计约束、引用完整性和脱敏检查 |
 | [`scripts/test_validator.py`](./scripts/test_validator.py) | 校验器故障注入与回归测试 |
 | [`.github/workflows/validate.yml`](./.github/workflows/validate.yml) | GitHub Actions 自动校验 |

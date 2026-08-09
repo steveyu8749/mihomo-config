@@ -2,7 +2,7 @@
 
 ## 目标与优先级
 
-V4.13 面向手机与电脑本机运行 Mihomo 的场景。设计优先级依次是：
+V4.14 面向手机与电脑本机运行 Mihomo 的场景。设计优先级依次是：
 
 1. 分流语义正确；
 2. 手机与电脑行为尽量一致；
@@ -22,7 +22,7 @@ V4.13 面向手机与电脑本机运行 Mihomo 的场景。设计优先级依次
 | DNS | Fake-IP 默认，Real-IP 例外最小化 |
 | Sniffer | 可以恢复域名，不覆盖连接目标 |
 | 私网 | TUN 路由排除与 `private_ip` 规则双层保护 |
-| 规则数据 | 公共 MRS + 自维护 domain text，不配置 GeoData |
+| 规则数据 | 公共 MRS + 自维护 domain / ipcidr text，不配置 GeoData |
 | Adobe | 公共模板默认完全关闭 |
 | 安全边界 | `allow-lan: false`，控制 API 只监听回环地址 |
 
@@ -115,7 +115,7 @@ MetaCubeX `private.mrs` 包含基准测试网段 `198.18.0.0/15`，默认 Fake-I
 
 ### DNS 缓存算法
 
-`cache-algorithm` 支持默认 LRU 和可选 ARC。V4.13 保持参数缺省，继续使用 LRU。没有设备侧缓存命中数据时，不假定 ARC 一定更优，也不为未经验证的收益增加配置分支。
+`cache-algorithm` 支持默认 LRU 和可选 ARC。V4.14 保持参数缺省，继续使用 LRU。没有设备侧缓存命中数据时，不假定 ARC 一定更优，也不为未经验证的收益增加配置分支。
 
 ## Sniffer
 
@@ -181,11 +181,11 @@ youtube            → google
 geolocation-!cn    → cn_domain
 ```
 
-V4.13 的自维护 `direct_domain` 位于全部专用业务域名之后、ProxyLite 之前。它是硬直连补充集，不是日常直连全集：普通中国域名和中国 IP 由 `cn_domain` / `cn_ip` 处理。当前 36 条完整覆盖原有的 ScienceDirect、Elsevier、Clarivate / Web of Science 资源，并补充高频科研入口，用于校园或机构出口 IP 认证；不复制 PT、下载进程、国内大厂域名或完整 Scholar 大类。
+V4.14 的自维护 `direct_domain` 位于全部专用业务域名之后、ProxyLite 之前。它是硬直连补充集，不是日常直连全集：普通中国域名和中国 IP 由 `cn_domain` / `cn_ip` 处理。当前 36 条完整覆盖原有的 ScienceDirect、Elsevier、Clarivate / Web of Science 资源，并补充高频科研入口，用于校园或机构出口 IP 认证；不复制 PT、下载进程、国内大厂域名或完整 Scholar 大类。
 
-ProxyLite 继续位于全部专用业务域名和 Direct 之后。ProxyLite 是用户可编辑的 classical 集合，无法预先证明其范围足够窄；将它放在 Bing、OneDrive、GitHub、Microsoft、Apple 等规则前面，会有遮蔽专用策略组的风险。它仍位于 GFW、地域和中国域名等宽泛集合之前。
+ProxyLite 继续位于全部专用业务域名和 Direct 之后。V4.14 将它纳入当前仓库，改为可直接转 MRS 的 domain text 集合。用户仍可扩展内容，因此无法预先证明其范围永远足够窄；将它放在 Bing、OneDrive、GitHub、Microsoft、Apple 等规则前面，会有遮蔽专用策略组的风险。它仍位于 GFW、地域和中国域名等宽泛集合之前。
 
-V4.13 对实际 ProxyLite 做了覆盖审计：删除已由专用/MRS 集合接管的条目和旧国外 DNS 清单；把仍会误命中 `zhubajie` 的 `DOMAIN-KEYWORD,bajie` 收窄为两个明确后缀。ProxyLite 的条目数量很小，收敛的主要收益是减少错误覆盖和维护漂移，而不是追求不可测量的 matcher 微优化。
+V4.13 对实际 ProxyLite 做了覆盖审计：删除已由专用/MRS 集合接管的条目和旧国外 DNS 清单；把仍会误命中 `zhubajie` 的 `DOMAIN-KEYWORD,bajie` 收窄为两个明确后缀。V4.14 将留下的 7 条域名与 2 条精确 IP 拆分为 `ProxyLite.list` 和 `ProxyIP.list`；后者使用 `ipcidr` 且路由带 `no-resolve`，不为匹配精确地址额外解析域名。
 
 Apple 使用完整 `apple.mrs`。域名流量由 `apple_domain` 处理，因此 `apple_ip` 使用 `no-resolve`，只兜底已有真实目标 IP 的连接。
 
@@ -208,7 +208,8 @@ Apple 使用完整 `apple.mrs`。域名流量由 `apple_domain` 处理，因此 
 公共域名分类 → domain MRS Rule Provider
 服务 / 中国 IP → ipcidr MRS Rule Provider
 自维护 Direct  → domain text Rule Provider
-ProxyLite      → classical text Rule Provider
+ProxyLite      → domain text Rule Provider
+ProxyIP        → ipcidr text Rule Provider
 Fake-IP 兼容   → domain text Rule Provider
 ```
 
@@ -218,9 +219,11 @@ Proxy Provider 不同：它需要在首次启动时提供代理节点，因此�
 
 Adobe classical YAML 规则默认关闭。桌面端如需启用，必须同时恢复路由规则、`&yaml` 锚点和 `adobeisdumb` Provider；手机端保持注释。
 
+MRS 只支持 `domain` 与 `ipcidr` behavior。因此启用中的自维护文本都使用这两种格式，CI 会将四份文本源转成临时 MRS 做核心验证。Adobe 是唯一保留的 classical 例外，且默认不启用。
+
 ## 为什么不用 GeoData
 
-V4.13 不配置 `GEOSITE`、`GEOIP`、`geodata-mode`、`geo-auto-update` 或 `geox-url`。
+V4.14 不配置 `GEOSITE`、`GEOIP`、`geodata-mode`、`geo-auto-update` 或 `geox-url`。
 
 主要考虑：
 
@@ -236,7 +239,7 @@ V4.13 不配置 `GEOSITE`、`GEOIP`、`geodata-mode`、`geo-auto-update` 或 `ge
 - 重复 YAML 键和未知顶层字段；
 - 策略组、规则目标、Provider 引用；
 - ProxyLite 与专用业务规则的相对顺序；
-- 自维护 Direct / Fake-IP 文本规则的语法、去重、必要条目与 Provider URL；
+- 自维护 Direct / Fake-IP / ProxyLite / ProxyIP 文本规则的 behavior、语法、去重、必要条目与 Provider URL；
 - DNS、TUN、Sniffer、进程正则和公开脱敏；
 - 配置活动字段注释覆盖；
 - README、Changelog、设计说明与 CI 版本同步。

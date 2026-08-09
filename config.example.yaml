@@ -62,7 +62,7 @@ external-controller: 127.0.0.1:9090                      # 仅本机开放 Mihom
 # 域名嗅探（Sniffer）
 # ==============================================================================
 # 作用：当 Fake-IP / DNSMapping 没有提供域名时，从 HTTP Host、TLS SNI、QUIC 握手中补充恢复域名。
-# 原则：只识别、不改目标。V4.13 不预设 skip-domain；如未来出现可稳定复现的问题，再按最小范围加回例外。
+# 原则：只识别、不改目标。V4.14 不预设 skip-domain；如未来出现可稳定复现的问题，再按最小范围加回例外。
 # 当前使用 Fake-IP，故不额外启用主要面向 Redir-Host DNSMapping 的 force-dns-mapping。
 sniffer:                                                  # 域名嗅探配置
   enable: true                                            # 启用 Sniffer，作为少数纯 IP / 缺失 DNSMapping 流量的兜底
@@ -125,7 +125,7 @@ dns:                                                      # Mihomo 内置 DNS �
 # ==============================================================================
 # 策略组
 # ==============================================================================
-# V4.13 不维护地区筛选、fallback、url-test 或共享“全部节点”组。
+# V4.14 不维护地区筛选、fallback、url-test 或共享“全部节点”组。
 # 仅“默认代理”通过 include-all 收纳全部节点；业务组只在“默认代理”和“直连”之间选择。
 proxy-groups:                                             # 所有可在客户端手动选择的策略组
   - name: 🚀 默认代理                                     # 全局默认代理出口；不提供硬直连选项，语义保持“必走代理”
@@ -155,7 +155,7 @@ proxy-groups:                                             # 所有可在客户�
 # ==============================================================================
 # 分流规则
 # ==============================================================================
-# Mihomo 按从上到下顺序匹配，命中后停止继续匹配。V4.13 继续使用独立 Rule Provider，不依赖 GEOSITE/GEOIP。
+# Mihomo 按从上到下顺序匹配，命中后停止继续匹配。V4.14 继续使用独立 Rule Provider，不依赖 GEOSITE/GEOIP。
 rules:                                                    # 实际流量分流规则；从上到下首个命中生效
   - RULE-SET,private_domain,直连                           # 私有域名优先硬直连，避免被进程或业务规则提前接管
   - RULE-SET,private_ip,直连,no-resolve                    # 私有/保留 IP 优先硬直连；补充 mixed/redir/tproxy 等未被 TUN 路由排除覆盖的流量
@@ -187,7 +187,8 @@ rules:                                                    # 实际流量分流�
   - RULE-SET,netflix_domain,🎥 NETFLIX                    # Netflix 独立策略组
   - RULE-SET,paypal_domain,💶 PayPal                      # PayPal 独立策略组
   - RULE-SET,direct_domain,直连                            # 自维护硬直连补充集；日常国内域名仍由 cn_domain / cn_ip 处理
-  - RULE-SET,proxylite,🚀 默认代理                         # 自定义规则位于全部专用业务后，避免抢先覆盖独立策略组
+  - RULE-SET,proxylite,🚀 默认代理                         # 自维护代理域名补充集；位于全部专用业务后
+  - RULE-SET,proxy_ip,🚀 默认代理,no-resolve               # 自维护精确 IP 补充集；不为匹配主动解析域名
   - RULE-SET,gfw_domain,🚀 默认代理                        # GFW 域名走默认代理
   - RULE-SET,geolocation-!cn,🚀 默认代理                   # 非中国域名优先代理，避免与宽泛 CN 集合交叉时被直连抢先
   - RULE-SET,cn_domain,直连                                # 其余中国域名硬直连
@@ -209,13 +210,14 @@ rule-anchor:                                              # Rule Provider 公共
   ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs}  # 远程 IP CIDR MRS：每 24 小时更新
   domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}  # 远程域名 MRS：每 24 小时更新
   domaintxt: &domaintxt {type: http, interval: 86400, behavior: domain, format: text}  # 自维护域名文本：每 24 小时更新
-  class: &class {type: http, interval: 86400, behavior: classical, format: text}  # 远程 Classical 文本规则：每 24 小时更新
+  iptxt: &iptxt {type: http, interval: 86400, behavior: ipcidr, format: text}  # 自维护 IP CIDR 文本：每 24 小时更新
   # yaml: &yaml {type: http, interval: 18000, behavior: classical, format: yaml}  # Adobe 桌面端规则启用时一并恢复
 
 rule-providers:                                          # rules 与 DNS Fake-IP Filter 引用的规则集总表
   fakeip_compat: {<<: *domaintxt, url: "https://raw.githubusercontent.com/steveyu8749/mihomo-config/main/rules/FakeIPFilter.list"}  # 仅收录会因 Fake-IP 出现功能故障的 Real-IP 例外
   direct_domain: {<<: *domaintxt, url: "https://raw.githubusercontent.com/steveyu8749/mihomo-config/main/rules/Direct.list"}  # 自维护硬直连补充集；用于科研资源与机构 IP 认证入口
-  proxylite: {<<: *class, url: "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_RULE_REPO/refs/heads/main/ProxyLite.list"}  # 自定义 ProxyLite；请替换为自己的规则源
+  proxylite: {<<: *domaintxt, url: "https://raw.githubusercontent.com/steveyu8749/mihomo-config/main/rules/ProxyLite.list"}  # 自维护代理域名补充集；可直接转换为 domain MRS
+  proxy_ip: {<<: *iptxt, url: "https://raw.githubusercontent.com/steveyu8749/mihomo-config/main/rules/ProxyIP.list"}  # 两条精确代理 IP；可直接转换为 ipcidr MRS
   # adobeisdumb: {<<: *yaml, url: "https://raw.githubusercontent.com/ignaciocastro/a-dove-is-dumb/refs/heads/main/clash.yaml"}  # 仅桌面端按需启用
   bing_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bing.mrs"}  # Bing 独立域名集合
   msn_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/msn.mrs"}  # MSN 独立域名集合

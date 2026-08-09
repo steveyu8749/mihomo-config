@@ -1,0 +1,16 @@
+# 自维护代理域名补充集（behavior: domain, format: text）
+#
+# 这里只收录必须固定进入“默认代理”、且现有专用服务或地域 MRS 未能表达的
+# 个人域名例外。使用 domain behavior 原生语法，便于 CI 直接转换为 MRS。
+# IP 例外单独维护在 ProxyIP.list，避免继续依赖 classical 混合规则。
+
+# 个人域名例外
++.qichiyu.com
++.mojie.me
++.smartasset.com
++.lendingtree.com
++.adjust.com
+
+# 八戒相关：使用明确后缀，不恢复会误匹配 zhubajie 的关键字规则。
++.bajie1.com
++.bajiexinxi.net
