@@ -1,4 +1,8 @@
-# 自维护直连域名集（behavior: domain, format: text）
+# 自维护硬直连补充集（behavior: domain, format: text）
+#
+# 它不是“所有日常直连域名”的总表：普通中国域名与中国 IP 已由主配置中的
+# cn_domain / cn_ip 处理，这里只补充会被前面的非中国集合命中、但因机构
+# 出口 IP 认证等明确理由必须硬直连的目标。
 #
 # 收录标准：
 # 1. 已确认需要硬直连；
@@ -11,7 +15,7 @@
 # 多个上游共同收录、常用于机构 IP 认证的主流科研入口；不合并 PT、下载进程、
 # 国内大厂域名或普通厂商大类。
 #
-# 上游参考（复核日期：2026-08-08）：
+# 上游参考（复核日期：2026-08-09）：
 # https://github.com/v2fly/domain-list-community/tree/master/data
 # https://github.com/MetaCubeX/meta-rules-dat/tree/meta/geo/geosite
 # https://github.com/blackmatrix7/ios_rule_script/tree/master/rule/Clash/Scholar

@@ -2,7 +2,7 @@
 
 [![Validate Mihomo template](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml/badge.svg)](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml)
 
-一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.11**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
+一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.12**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
 
 这不是机场订阅转换模板，也不是自动测速方案。节点由用户手工选择，配置专注于分流语义和跨客户端一致性。
 
@@ -107,6 +107,8 @@ tun:
 
 `100.64.0.0/10` 默认保持注释。只有确认运营商 CGNAT、Tailscale 或其他软件要求该网段绕过 TUN 时再启用。
 
+公共模板不设置 `strict-route`。它加强的是操作系统层的路由接管和防泄漏，不会让 `rules` “匹配得更严格”；在 Windows 上还可能影响 VirtualBox 等多宿主网络。需要严格防止系统流量绕过 TUN、并确认本机没有兼容性冲突时，可在自己的桌面端配置中单独启用，启用后应重点回归局域网、虚拟机、DNS 与休眠恢复。
+
 `allow-lan: false` 只表示其他局域网设备不能连接本机的代理端口，不等于本机无法访问局域网设备。两者属于不同方向的网络行为。
 
 ## DNS 与 Fake-IP
@@ -158,19 +160,6 @@ dns.msftncsi.com
 +.market.xiaomi.com
 +.pub.3gppnetwork.org
 +.plex.direct
-time.apple.com
-time-macos.apple.com
-time.windows.com
-time.android.com
-time.google.com
-+.pool.ntp.org
-ntp.aliyun.com
-ntp1.aliyun.com
-ntp.tencent.com
-ntp.ntsc.ac.cn
-cn.ntp.org.cn
-localhost.ptlogin2.qq.com
-localhost.sec.qq.com
 localhost.*.weixin.qq.com
 ```
 
@@ -178,7 +167,9 @@ Google Play 只保留 `+.services.googleapis.cn` 与 `+.xn--ngstr-lra8j.com`。�
 
 其余例外也只解决明确的地址依赖：Windows NCSI 使用 `www.msftconnecttest.com` 完成 HTTP 联网/强制门户探测，并查询 `dns.msftncsi.com`；APNs 系统连接可能需要可直接使用的真实端点；`plex.direct` 本身会解析到 Plex 服务器的局域网地址，Fake-IP 会破坏本地安全直连；小米项保留应用商店与天气组件的已知兼容处理。可分别参照 [Microsoft NCSI 过程说明](https://learn.microsoft.com/en-us/troubleshoot/windows-client/networking/internet-explorer-edge-open-connect-corporate-public-network)、[Apple APNs 网络要求](https://support.apple.com/guide/deployment/configure-devices-to-work-with-apns-dep2de55389a/web) 与 [Plex 安全连接说明](https://support.plex.tv/articles/206225077-how-to-use-secure-server-connections/)。`+.msftconnecttest.com` 是兼容性保险，不表示正确接管的 Fake-IP TUN 必然无法通过 NCSI，也不会强制该流量直连。
 
-NTP 例外覆盖 Windows、Apple、Android、Google Public NTP、NTP Pool 以及常用国内时间源。NTP 使用 UDP 123，Fake-IP 本身并非不支持 UDP；这里返回真实 IP 的理由是系统校时可能早于代理/TUN 完全就绪，且真实目标对系统基础服务更稳妥。列表刻意不使用 `time.*.com`、`ntp*.com` 之类容易误匹配普通网站的宽泛模式。腾讯登录和微信的三个 `localhost` 回调则必须保留本地地址语义。
+NTP 域名不再加入例外。NTP 使用 UDP 123，而 Fake-IP 能映射 UDP；在没有实际校时故障时，预防性返回 Real-IP 只会扩大维护范围，不能证明更稳定。若某台设备确实无法校时，应先确认 UDP 123、TUN 启动时序和系统日志，再针对可复现的具体域名或端口处理。
+
+MetaCubeX `private_domain` 已覆盖 `localhost.ptlogin2.qq.com` 与 `localhost.sec.qq.com`，因此不在自维护列表重复收录；这里只补充它尚未覆盖的 `localhost.*.weixin.qq.com`。这三类回调仍都会得到真实地址，只是由两个不同 Provider 分工维护。
 
 `+.pub.3gppnetwork.org` 专门处理 Wi-Fi Calling。手机会访问形如 `ss.epdg.epc.mnc260.mcc310.pub.3gppnetwork.org` 的运营商 ePDG 主机，并通过 UDP 500/4500 建立 IKE/IPsec 隧道；Fake-IP 可能使隧道无法发起。已有 [OpenClash #3884](https://github.com/vernesong/OpenClash/issues/3884) 记录了 Fake-IP 失败、切换 Redir-Host 后恢复的完整复现。这里没有使用范围更大的 `+.3gppnetwork.org`。
 
@@ -210,7 +201,7 @@ MetaCubeX 的 `private.mrs` 包含 `198.18.0.0/15`，而默认 Fake-IP 池 `198.
 
 ### `cache-algorithm`
 
-Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.11 不显式设置 `cache-algorithm`，继续使用默认 LRU。
+Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.12 不显式设置 `cache-algorithm`，继续使用默认 LRU。
 
 ARC 并不等于无条件更快。没有观测到 DNS 缓存频繁抖动、也没有针对设备内存与访问模式做测量时，增加该参数只会扩大配置变量，难以证明实际收益。如果以后有明确的缓存命中问题，可以单独测试：
 
@@ -235,7 +226,7 @@ HTTP Host、TLS SNI 与 QUIC 握手信息只用于补充域名识别和规则匹
 
 ## 分流规则
 
-Mihomo 从上到下匹配，命中后停止。V4.11 的顺序是：
+Mihomo 从上到下匹配，命中后停止。V4.12 的顺序是：
 
 1. 私有域名与私有 IP；
 2. 进程规则；
@@ -268,6 +259,8 @@ ProxyLite 位于所有专用业务域名之后、GFW / 地域规则之前。自�
 ```
 
 它位于全部专用业务规则之后、ProxyLite 与宽泛地域规则之前。这样新增的普通直连例外会优先于 ProxyLite，但不会抢走 Google、Microsoft、Apple、OneDrive 等已经明确分组的服务。
+
+这是一份“硬直连补充集”，不是日常直连域名全集。普通中国域名和中国 IP 已由 `cn_domain` / `cn_ip` 处理；把它们再次复制到这里既不增加覆盖面，还会制造重复来源和维护漂移。当前 36 条的共同用途是优先使用本地、校园或机构出口，尤其保留基于出口 IP 的资源授权。
 
 新增部分选择了 DOI、ACM、IEEE、JSTOR、Nature、Oxford、ProQuest、Science、Springer、Taylor & Francis 和 Wiley 等高频入口，并与 [V2Fly `category-scholar-!cn`](https://github.com/v2fly/domain-list-community/blob/master/data/category-scholar-!cn) 和 [blackmatrix7 Scholar / Direct](https://github.com/blackmatrix7/ios_rule_script/tree/master/rule/Clash/Scholar) 交叉核对。它们适合依赖校园或机构出口 IP 认证的环境；没有这类需求时可以按需删除新增分组。
 
@@ -315,10 +308,11 @@ Apple 域名默认直连，异常时可在 `🍎 Apple` 组切换为默认代理
 
 ### 进程规则
 
-两种常用规则格式如下：
+三种进程规则格式如下：
 
 ```text
 PROCESS-NAME,进程名或包名,目标策略组
+PROCESS-NAME-WILDCARD,通配表达式,目标策略组
 PROCESS-NAME-REGEX,正则表达式,目标策略组
 ```
 
@@ -329,16 +323,16 @@ PROCESS-NAME-REGEX,正则表达式,目标策略组
 - PROCESS-NAME,com.microsoft.bing,🪟 Microsoft
 ```
 
-`PROCESS-NAME-REGEX` 执行忽略大小写的正则匹配：
+`PROCESS-NAME-WILDCARD` 使用 `*` 匹配任意长度字符、`?` 匹配一个字符，也忽略大小写：
 
 ```yaml
-- PROCESS-NAME-REGEX,.*spotify.*,直连
-- PROCESS-NAME-REGEX,^spotify(?:\.exe)?$,直连
+- PROCESS-NAME-WILDCARD,*spotify*,直连
+- PROCESS-NAME-WILDCARD,*xboxone*,🪟 Microsoft
 ```
 
-第一条匹配名称或 Android 包名中任何包含 `spotify` 的进程；第二条只匹配 `spotify` 或 `spotify.exe`。已知稳定名称时优先使用精确匹配；只有确实存在多个变体时才使用正则。简单的 `*`、`?` 通配也可以改用更易读的 `PROCESS-NAME-WILDCARD`。
+两条都表示“名称或 Android 包名中包含对应文本”。前后的 `*` 分别吞掉目标文本前后任意数量的字符，所以 `com.spotify.music` 和 `something.xboxone.app` 都能命中。
 
-当前 `.*xboxone.*` 只覆盖名称或包名中含 `xboxone` 的目标，并不代表全部 Xbox 相关 Windows 进程。扩展前应先从客户端连接记录确认真实进程名，避免使用过宽的正则。
+`PROCESS-NAME-REGEX` 仍可用于分组、边界、多分支等复杂模式，例如 `^spotify(?:\.exe)?$`；当前配置没有这种需求，因此不用正则表达简单子串。`*xboxone*` 只覆盖名称或包名中含 `xboxone` 的目标，并不代表全部 Xbox 相关 Windows 进程。扩展前应先从客户端连接记录确认真实进程名。
 
 进程规则依赖操作系统或客户端提供进程信息。桌面端 TUN 通常可用，Android 可匹配包名；部署在路由器上的 Mihomo 通常无法识别下游终端进程，因此不会命中这些规则。`find-process-mode: strict` 会在规则需要时查询进程信息。
 
@@ -356,7 +350,7 @@ HTTP Rule Provider 每 24 小时更新。模板没有给它们设置 `proxy`，�
 
 这与 Proxy Provider 不同：机场订阅需要先提供代理节点，所以模板为它明确设置硬直连，避免循环依赖。
 
-所有启用的 MetaCubeX MRS URL 已在本次 V4.11 复审中检查存在性，格式与声明的 `behavior` 一致；两个自维护文本列表会在 CI 中额外转换为 MRS，以验证 Mihomo 能实际解析。
+所有启用的 MetaCubeX MRS URL 已在本次 V4.12 复审中检查存在性，格式与声明的 `behavior` 一致；两个自维护文本列表会在 CI 中额外转换为 MRS，以验证 Mihomo 能实际解析。
 
 ## Adobe：默认完全关闭
 
@@ -407,7 +401,7 @@ python3 scripts/validate_config.py config.example.yaml
 - MRS Provider 的类型、格式、URL 与更新周期；
 - 自维护 Direct / Fake-IP 文本列表的语法、重复项和必要条目；
 - ProxyLite、Microsoft、Google、Apple 和 IP 兜底的关键顺序；
-- DNS、TUN、Sniffer 与进程正则约束；
+- DNS、TUN、Sniffer 与进程匹配约束；
 - 配置中每个活动字段是否带说明注释；
 - README、设计说明、Changelog 与 CI 版本是否同步。
 

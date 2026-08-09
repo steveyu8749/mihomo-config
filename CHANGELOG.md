@@ -1,5 +1,14 @@
 # Changelog
 
+## V4.12
+
+- 完成最终全量审查：逐项检查主配置、规则顺序、Provider 引用与 25 个启用的 MetaCubeX MRS，并使用 Mihomo v1.19.29 转换两个自维护文本列表验证核心可读性。
+- `rules/FakeIPFilter.list` 从 22 条收敛为 9 条：删除没有实际故障证据的 11 条 NTP 例外；`private_domain` 已覆盖的两个 QQ `localhost` 回调不再重复维护，微信通配回调继续保留。
+- Spotify 与 Xbox 的简单子串匹配改用 `PROCESS-NAME-WILDCARD`；`PROCESS-NAME-REGEX` 只保留给真正需要分组、边界或多分支的复杂模式。
+- 明确公共跨平台模板不设置 `strict-route`：它影响系统路由接管与防泄漏，不改变规则语义，并可能与 Windows 虚拟化网络冲突。
+- 明确 `rules/Direct.list` 是 36 条硬直连补充项，日常国内流量由 `cn_domain` / `cn_ip` 负责；不复制整套国内域名。
+- 加强仓库校验器和 15 个故障注入测试，禁止未记录的 NTP、`strict-route`、`skip-domain` 及 DNS/TUN/Sniffer 额外字段回流。
+
 ## V4.11
 
 - 将 Google Play Real-IP 例外从 `+.googleapis.cn` 收窄为 `+.services.googleapis.cn`，避免无故覆盖其他 Google API 子域；继续保留 IDN CDN 后缀。

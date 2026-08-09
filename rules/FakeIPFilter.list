@@ -29,23 +29,8 @@ dns.msftncsi.com
 # Plex：*.plex.direct 会按设备返回局域网地址，用 Fake-IP 替换会破坏本地安全直连。
 +.plex.direct
 
-# 系统校时：NTP 使用 UDP 123，部分系统服务可能在代理/TUN 完全就绪前启动。
-# 这里只列主流系统默认入口与常用公共池，不使用 time.*.com / ntp*.com 等宽泛模式。
-time.apple.com
-time-macos.apple.com
-time.windows.com
-time.android.com
-time.google.com
-+.pool.ntp.org
-ntp.aliyun.com
-ntp1.aliyun.com
-ntp.tencent.com
-ntp.ntsc.ac.cn
-cn.ntp.org.cn
-
-# 腾讯本地回调：这些主机名的 localhost 语义不能被 Fake-IP 替换。
-localhost.ptlogin2.qq.com
-localhost.sec.qq.com
+# 腾讯/微信本地回调：private_domain 已覆盖 localhost.ptlogin2.qq.com 与
+# localhost.sec.qq.com；这里只补充其未覆盖的微信通配主机名。
 localhost.*.weixin.qq.com
 
 # Xbox 候选（默认不启用）：传统列表普遍包含以下主机形态，但现有资料只能说明

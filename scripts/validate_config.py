@@ -12,7 +12,7 @@ from yaml.nodes import MappingNode
 from yaml.resolver import BaseResolver
 
 
-TEMPLATE_VERSION = "V4.11"
+TEMPLATE_VERSION = "V4.12"
 PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 DEFAULT_PROXY = "🚀 默认代理"
 HARD_DIRECT = "直连"
@@ -105,19 +105,6 @@ REQUIRED_FAKEIP_COMPAT = {
     "+.market.xiaomi.com",
     "+.pub.3gppnetwork.org",
     "+.plex.direct",
-    "time.apple.com",
-    "time-macos.apple.com",
-    "time.windows.com",
-    "time.android.com",
-    "time.google.com",
-    "+.pool.ntp.org",
-    "ntp.aliyun.com",
-    "ntp1.aliyun.com",
-    "ntp.tencent.com",
-    "ntp.ntsc.ac.cn",
-    "cn.ntp.org.cn",
-    "localhost.ptlogin2.qq.com",
-    "localhost.sec.qq.com",
     "localhost.*.weixin.qq.com",
 }
 
@@ -163,9 +150,9 @@ REQUIRED_DIRECT_DOMAINS = {
 REQUIRED_RULES = {
     "RULE-SET,private_domain,直连",
     "RULE-SET,private_ip,直连,no-resolve",
-    "PROCESS-NAME-REGEX,.*spotify.*,直连",
+    "PROCESS-NAME-WILDCARD,*spotify*,直连",
     "PROCESS-NAME,onedrive.exe,直连",
-    "PROCESS-NAME-REGEX,.*xboxone.*,🪟 Microsoft",
+    "PROCESS-NAME-WILDCARD,*xboxone*,🪟 Microsoft",
     "PROCESS-NAME,com.microsoft.bing,🪟 Microsoft",
     "RULE-SET,ai_domain,🤖 ChatGPT",
     "RULE-SET,direct_domain,直连",
@@ -302,6 +289,15 @@ def require_list(value: Any, name: str, errors: list[str]) -> list[Any]:
         return value
     fail(errors, f"{name} must be a list")
     return []
+
+
+def validate_exact_keys(
+    mapping: dict[str, Any], expected: set[str], name: str, errors: list[str]
+) -> None:
+    for key in sorted(expected - set(mapping)):
+        fail(errors, f"{name} is missing required key: {key}")
+    for key in sorted(set(mapping) - expected):
+        fail(errors, f"{name} contains an unexpected key: {key}")
 
 
 def is_placeholder_url(url: str) -> bool:
@@ -540,7 +536,7 @@ def validate_maintained_rule_files(root: Path, errors: list[str]) -> None:
     ):
         fail(
             errors,
-            "rules/FakeIPFilter.list must contain exactly the 22 audited compatibility entries",
+            f"rules/FakeIPFilter.list must contain exactly the {len(REQUIRED_FAKEIP_COMPAT)} audited compatibility entries",
         )
 
 
@@ -692,7 +688,7 @@ def validate_rules(
                 fail(errors, f"IP fallback {provider_name!r} must use no-resolve")
             if provider_name == "cn_ip" and options:
                 fail(errors, "cn_ip intentionally retains resolution and must not use no-resolve")
-        elif rule_type in {"PROCESS-NAME", "DOMAIN-SUFFIX"}:
+        elif rule_type in {"PROCESS-NAME", "PROCESS-NAME-WILDCARD", "DOMAIN-SUFFIX"}:
             if len(parts) != 3 or not parts[1]:
                 fail(errors, f"malformed {rule_type} rule at index {index}: {rule}")
                 continue
@@ -767,6 +763,27 @@ def validate_rules(
 def validate_dns(
     dns: dict[str, Any], providers: dict[str, Any], errors: list[str]
 ) -> set[str]:
+    expected_keys = {
+        "enable",
+        "ipv6",
+        "enhanced-mode",
+        "fake-ip-range",
+        "fake-ip-filter-mode",
+        "fake-ip-filter",
+        "default-nameserver",
+        "nameserver",
+        "direct-nameserver",
+    }
+    for key in sorted(set(dns) - expected_keys):
+        if key == "respect-rules":
+            fail(errors, "dns.respect-rules must remain omitted for the direct domestic DoH design")
+        elif key == "cache-algorithm":
+            fail(errors, "dns.cache-algorithm must remain omitted so Mihomo uses its default LRU cache")
+        else:
+            fail(errors, f"dns contains an unexpected key: {key}")
+    for key in sorted(expected_keys - set(dns)):
+        fail(errors, f"dns is missing required key: {key}")
+
     expected_scalars = {
         "enable": True,
         "ipv6": False,
@@ -795,11 +812,6 @@ def validate_dns(
         if dns.get(key) != value:
             fail(errors, f"dns.{key} does not match the audited {TEMPLATE_VERSION} design")
 
-    if dns.get("respect-rules") is True:
-        fail(errors, "respect-rules must remain disabled for the direct domestic DoH design")
-    if "cache-algorithm" in dns and dns.get("cache-algorithm") not in {"lru", "arc"}:
-        fail(errors, "dns.cache-algorithm, when set, must be lru or arc")
-
     referenced: set[str] = set()
     fake_filter = dns.get("fake-ip-filter")
     if isinstance(fake_filter, list):
@@ -818,17 +830,23 @@ def validate_dns(
 
 
 def validate_sniffer(sniffer: dict[str, Any], errors: list[str]) -> None:
+    expected_keys = {"enable", "parse-pure-ip", "override-destination", "sniff"}
+    for key in sorted(set(sniffer) - expected_keys):
+        if key == "skip-domain":
+            fail(errors, "sniffer.skip-domain must remain omitted unless a reproducible exception is documented")
+        elif key == "force-dns-mapping":
+            fail(errors, "sniffer.force-dns-mapping must remain omitted in this Fake-IP-first design")
+        else:
+            fail(errors, f"sniffer contains an unexpected key: {key}")
+    for key in sorted(expected_keys - set(sniffer)):
+        fail(errors, f"sniffer is missing required key: {key}")
+
     if sniffer.get("enable") is not True:
         fail(errors, "sniffer must remain enabled")
     if sniffer.get("parse-pure-ip") is not True:
         fail(errors, "sniffer.parse-pure-ip must remain enabled")
     if sniffer.get("override-destination") is not False:
         fail(errors, "sniffer.override-destination must remain false")
-    if sniffer.get("skip-domain"):
-        fail(errors, "sniffer.skip-domain must remain empty unless a reproducible exception is documented")
-    if sniffer.get("force-dns-mapping") is True:
-        fail(errors, "force-dns-mapping is unnecessary in this Fake-IP-first design")
-
     sniff = require_mapping(sniffer.get("sniff"), "sniffer.sniff", errors)
     expected_ports = {
         "HTTP": [80, "8080-8880"],
@@ -846,9 +864,26 @@ def validate_sniffer(sniffer: dict[str, Any], errors: list[str]) -> None:
             fail(errors, f"sniffer protocol {protocol} has unexpected ports")
         if config.get("override-destination") is True:
             fail(errors, f"sniffer protocol {protocol} must not override destination")
+        validate_exact_keys(config, {"ports"}, f"sniffer protocol {protocol}", errors)
 
 
 def validate_tun(tun: dict[str, Any], errors: list[str]) -> None:
+    expected_keys = {
+        "enable",
+        "stack",
+        "dns-hijack",
+        "auto-route",
+        "auto-detect-interface",
+        "route-exclude-address",
+    }
+    for key in sorted(set(tun) - expected_keys):
+        if key == "strict-route":
+            fail(errors, "tun.strict-route must remain omitted in the shared cross-platform template")
+        else:
+            fail(errors, f"tun contains an unexpected key: {key}")
+    for key in sorted(expected_keys - set(tun)):
+        fail(errors, f"tun is missing required key: {key}")
+
     expected = {
         "enable": True,
         "stack": "mixed",
@@ -983,6 +1018,9 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
         "cache-algorithm": "DNS cache algorithm decision",
         "ProxyLite": "ProxyLite priority",
         "respect-rules": "DNS upstream routing",
+        "strict-route": "cross-platform TUN strict routing decision",
+        "PROCESS-NAME-WILDCARD": "simple process-name wildcard matching",
+        "NTP": "NTP Fake-IP exception decision",
         "Direct.list": "maintained direct-domain list",
         "FakeIPFilter.list": "maintained Fake-IP compatibility list",
     }

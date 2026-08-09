@@ -81,6 +81,24 @@ def add_protocol_override(text: str) -> str:
     return replace_once(text, tls_line, replacement)
 
 
+def add_skip_domain(text: str) -> str:
+    anchor = "  override-destination: false                             # 嗅探域名只用于识别/分流，不替换原始连接目标\n"
+    replacement = (
+        anchor
+        + "  skip-domain: [\"+.example.com\"]                       # regression test: undocumented exception\n"
+    )
+    return replace_once(text, anchor, replacement)
+
+
+def add_strict_route(text: str) -> str:
+    anchor = "  auto-route: true                                        # 自动写入系统路由，把普通流量导入 TUN\n"
+    replacement = (
+        anchor
+        + "  strict-route: true                                      # regression test: platform-specific override\n"
+    )
+    return replace_once(text, anchor, replacement)
+
+
 def remove_mode_comment(text: str) -> str:
     old = "mode: rule                                                # 使用规则模式；DIRECT / PROXY 由下方 rules 与策略组决定"
     return replace_once(text, old, "mode: rule")
@@ -128,9 +146,25 @@ TEST_CASES: list[tuple[str, str, Callable[[str], str], str]] = [
         "sniffer protocol TLS must not override destination",
     ),
     (
+        "undocumented sniffer skip-domain",
+        "config.example.yaml",
+        add_skip_domain,
+        "sniffer.skip-domain must remain omitted",
+    ),
+    (
+        "cross-platform strict-route override",
+        "config.example.yaml",
+        add_strict_route,
+        "tun.strict-route must remain omitted",
+    ),
+    (
         "invalid process regex",
         "config.example.yaml",
-        lambda text: replace_once(text, ".*spotify.*", "(*spotify"),
+        lambda text: replace_once(
+            text,
+            "PROCESS-NAME-WILDCARD,*spotify*,直连",
+            "PROCESS-NAME-REGEX,(*spotify,直连",
+        ),
         "invalid process regex",
     ),
     (
@@ -163,7 +197,13 @@ TEST_CASES: list[tuple[str, str, Callable[[str], str], str]] = [
         "missing audited Fake-IP exception",
         "rules/FakeIPFilter.list",
         lambda text: replace_once(text, "+.services.googleapis.cn\n", ""),
-        "must contain exactly the 22 audited compatibility entries",
+        "must contain exactly the 9 audited compatibility entries",
+    ),
+    (
+        "unapproved NTP Fake-IP exception",
+        "rules/FakeIPFilter.list",
+        lambda text: text + "\ntime.windows.com\n",
+        "must contain exactly the 9 audited compatibility entries",
     ),
     (
         "classical syntax in domain text list",
