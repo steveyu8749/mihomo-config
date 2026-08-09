@@ -12,7 +12,7 @@ from yaml.nodes import MappingNode
 from yaml.resolver import BaseResolver
 
 
-TEMPLATE_VERSION = "V4.15"
+TEMPLATE_VERSION = "V5.0"
 PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 DEFAULT_PROXY = "🚀 默认代理"
 HARD_DIRECT = "直连"
@@ -102,10 +102,10 @@ CUSTOM_IP_PROVIDER_PATHS = {
 }
 
 GENERATED_MRS_PATHS = {
-    "Direct.mrs": "mrs/Direct.mrs",
-    "FakeIPFilter.mrs": "mrs/FakeIPFilter.mrs",
-    "ProxyLite.mrs": "mrs/ProxyLite.mrs",
-    "ProxyIP.mrs": "mrs/ProxyIP.mrs",
+    "Direct.mrs": "mihomo/mrs/Direct.mrs",
+    "FakeIPFilter.mrs": "mihomo/mrs/FakeIPFilter.mrs",
+    "ProxyLite.mrs": "mihomo/mrs/ProxyLite.mrs",
+    "ProxyIP.mrs": "mihomo/mrs/ProxyIP.mrs",
 }
 
 REQUIRED_FAKEIP_COMPAT = {
@@ -417,7 +417,7 @@ def expected_rule_provider_url(name: str) -> str:
 
 
 def expected_custom_provider_url(path: str) -> str:
-    return f"https://raw.githubusercontent.com/steveyu8749/mihomo-config/main/{path}"
+    return f"https://raw.githubusercontent.com/steveyu8749/proxy-routing-config/main/{path}"
 
 
 def validate_provider_shape(
@@ -468,7 +468,7 @@ def validate_rule_providers(
         if not isinstance(provider, dict):
             fail(errors, f"missing generated domain MRS rule-provider: {name}")
             continue
-        generated_path = f"mrs/{Path(path).stem}.mrs"
+        generated_path = f"mihomo/mrs/{Path(path).stem}.mrs"
         expected = {
             "type": "http",
             "interval": 86400,
@@ -487,7 +487,7 @@ def validate_rule_providers(
         if not isinstance(provider, dict):
             fail(errors, f"missing generated IP MRS rule-provider: {name}")
             continue
-        generated_path = f"mrs/{Path(path).stem}.mrs"
+        generated_path = f"mihomo/mrs/{Path(path).stem}.mrs"
         expected = {
             "type": "http",
             "interval": 86400,
@@ -625,16 +625,16 @@ def validate_maintained_rule_files(root: Path, errors: list[str]) -> None:
 
 def validate_generated_mrs_files(root: Path, errors: list[str]) -> None:
     expected_names = set(GENERATED_MRS_PATHS)
-    mrs_directory = root / "mrs"
+    mrs_directory = root / "mihomo/mrs"
     if not mrs_directory.is_dir():
-        fail(errors, "generated MRS directory is missing: mrs/")
+        fail(errors, "generated MRS directory is missing: mihomo/mrs/")
         return
 
     actual_names = {path.name for path in mrs_directory.glob("*.mrs")}
     if actual_names != expected_names:
         fail(
             errors,
-            "mrs/ must contain exactly the four generated outputs: "
+            "mihomo/mrs/ must contain exactly the four generated outputs: "
             + ", ".join(sorted(expected_names)),
         )
 
@@ -1110,11 +1110,12 @@ def validate_public_secrets(
 
 
 def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
-    root = config_path.resolve().parent
+    root = config_path.resolve().parents[1]
     required_files = {
         "README.md": root / "README.md",
         "CHANGELOG.md": root / "CHANGELOG.md",
-        "docs/design-notes.md": root / "docs/design-notes.md",
+        "docs/mihomo-design.md": root / "docs/mihomo-design.md",
+        "docs/shadowrocket-design.md": root / "docs/shadowrocket-design.md",
         ".github/workflows/validate.yml": root / ".github/workflows/validate.yml",
         "rules/Direct.list": root / "rules/Direct.list",
         "rules/FakeIPFilter.list": root / "rules/FakeIPFilter.list",
@@ -1131,7 +1132,7 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
 
     readme = required_files["README.md"].read_text(encoding="utf-8")
     changelog = required_files["CHANGELOG.md"].read_text(encoding="utf-8")
-    design = required_files["docs/design-notes.md"].read_text(encoding="utf-8")
+    design = required_files["docs/mihomo-design.md"].read_text(encoding="utf-8")
     workflow = required_files[".github/workflows/validate.yml"].read_text(encoding="utf-8")
 
     validate_maintained_rule_files(root, errors)
@@ -1156,7 +1157,7 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
         "FakeIPFilter.list": "maintained Fake-IP compatibility list",
         "ProxyLite.list": "maintained proxy-domain list",
         "ProxyIP.list": "maintained proxy-IP list",
-        "mrs/": "generated MRS directory",
+        "mihomo/mrs/": "generated MRS directory",
     }
     for text, topic in required_readme_topics.items():
         if text not in readme:
@@ -1169,7 +1170,7 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
         fail(errors, "README and workflow disagree about the pinned Mihomo version")
     if "PyYAML==6.0.3" not in workflow:
         fail(errors, "workflow must pin the PyYAML validator dependency")
-    for changed_path in ("README.md", "CHANGELOG.md", "docs/design-notes.md", "rules/**"):
+    for changed_path in ("README.md", "CHANGELOG.md", "docs/**", "rules/**"):
         if workflow.count(f'"{changed_path}"') < 2:
             fail(errors, f"workflow path filters must validate changes to {changed_path}")
 
@@ -1179,19 +1180,19 @@ def validate_repository_docs(config_path: Path, errors: list[str]) -> None:
         "contents: write": "job-scoped permission for generated MRS publishing",
         "github.event_name != 'pull_request'": "read-only pull request boundary",
         "github.ref == 'refs/heads/main'": "main-only generated MRS publishing boundary",
-        'rules/Direct.list" "${GITHUB_WORKSPACE}/mrs/Direct.mrs': "Direct MRS output",
-        'rules/FakeIPFilter.list" "${GITHUB_WORKSPACE}/mrs/FakeIPFilter.mrs': "Fake-IP MRS output",
-        'rules/ProxyLite.list" "${GITHUB_WORKSPACE}/mrs/ProxyLite.mrs': "ProxyLite MRS output",
-        'convert-ruleset ipcidr text "${GITHUB_WORKSPACE}/rules/ProxyIP.list" "${GITHUB_WORKSPACE}/mrs/ProxyIP.mrs': "ProxyIP MRS output",
-        'git commit -m "Update generated MRS rules"': "generated-only commit",
+        'rules/Direct.list" "${GITHUB_WORKSPACE}/mihomo/mrs/Direct.mrs': "Direct MRS output",
+        'rules/FakeIPFilter.list" "${GITHUB_WORKSPACE}/mihomo/mrs/FakeIPFilter.mrs': "Fake-IP MRS output",
+        'rules/ProxyLite.list" "${GITHUB_WORKSPACE}/mihomo/mrs/ProxyLite.mrs': "ProxyLite MRS output",
+        'convert-ruleset ipcidr text "${GITHUB_WORKSPACE}/rules/ProxyIP.list" "${GITHUB_WORKSPACE}/mihomo/mrs/ProxyIP.mrs': "ProxyIP MRS output",
+        'git commit -m "Update generated client rules"': "generated-only commit",
     }
     for fragment, purpose in required_mrs_workflow_fragments.items():
         if fragment not in workflow:
             fail(errors, f"workflow is missing the {purpose}")
     if workflow.count("contents: write") != 1:
         fail(errors, "workflow must grant contents:write only to the generated MRS publishing job")
-    if '"mrs/**"' in workflow:
-        fail(errors, "mrs/** must not trigger the workflow and create a generation loop")
+    if '"mihomo/mrs/**"' in workflow:
+        fail(errors, "mihomo/mrs/** must not trigger the workflow and create a generation loop")
 
 
 def main() -> int:
@@ -1201,7 +1202,7 @@ def main() -> int:
             "Mihomo remains the authoritative core syntax validator."
         )
     )
-    parser.add_argument("config", nargs="?", default="config.example.yaml")
+    parser.add_argument("config", nargs="?", default="mihomo/mihomo.yaml")
     args = parser.parse_args()
 
     path = Path(args.config)

@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG = ROOT / "config.example.yaml"
+CONFIG = ROOT / "mihomo/mihomo.yaml"
 VALIDATOR = ROOT / "scripts" / "validate_config.py"
 
 
@@ -115,31 +115,31 @@ def remove_mode_comment(text: str) -> str:
 TEST_CASES: list[tuple[str, str, Callable[[str], str], str]] = [
     (
         "duplicate YAML key",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         add_duplicate_mode,
         "found duplicate key 'mode'",
     ),
     (
         "ProxyLite shadows a dedicated service",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         move_proxylite_before_bing,
         "must appear before proxylite",
     ),
     (
         "Direct shadows a dedicated service",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         move_direct_before_bing,
         "must appear before direct_domain",
     ),
     (
         "missing referenced provider",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         remove_bing_provider,
         "missing domain MRS rule-provider: bing_domain",
     ),
     (
         "unknown rule target",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         lambda text: replace_once(
             text,
             "RULE-SET,onedrive_domain,🐬 OneDrive",
@@ -149,31 +149,31 @@ TEST_CASES: list[tuple[str, str, Callable[[str], str], str]] = [
     ),
     (
         "protocol-local destination override",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         add_protocol_override,
         "sniffer protocol TLS must not override destination",
     ),
     (
         "undocumented sniffer skip-domain",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         add_skip_domain,
         "sniffer.skip-domain must remain omitted",
     ),
     (
         "cross-platform strict-route override",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         add_strict_route,
         "tun.strict-route must remain omitted",
     ),
     (
         "eager provider health checks",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         disable_lazy_health_check,
         "health-check.lazy must be True",
     ),
     (
         "invalid process regex",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         lambda text: replace_once(
             text,
             "PROCESS-NAME-WILDCARD,*spotify*,直连",
@@ -183,7 +183,7 @@ TEST_CASES: list[tuple[str, str, Callable[[str], str], str]] = [
     ),
     (
         "domain rule with no-resolve",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         lambda text: replace_once(
             text,
             "RULE-SET,bing_domain,🪟 Microsoft",
@@ -193,7 +193,7 @@ TEST_CASES: list[tuple[str, str, Callable[[str], str], str]] = [
     ),
     (
         "live subscription URL",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         lambda text: replace_first(
             text,
             'url: "订阅url"',
@@ -203,7 +203,7 @@ TEST_CASES: list[tuple[str, str, Callable[[str], str], str]] = [
     ),
     (
         "missing field comment",
-        "config.example.yaml",
+        "mihomo/mihomo.yaml",
         remove_mode_comment,
         "active config lines missing explanatory comments",
     ),
@@ -271,7 +271,7 @@ def main() -> int:
             target_path.write_text(
                 mutate(target_path.read_text(encoding="utf-8")), encoding="utf-8"
             )
-            result = run_validator(case_root / "config.example.yaml")
+            result = run_validator(case_root / "mihomo/mihomo.yaml")
             output = result.stdout + result.stderr
             if result.returncode == 0:
                 failures.append(f"{name}: validator incorrectly accepted the mutation")

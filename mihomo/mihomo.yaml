@@ -62,7 +62,7 @@ external-controller: 127.0.0.1:9090                      # 仅本机开放 Mihom
 # 域名嗅探（Sniffer）
 # ==============================================================================
 # 作用：当 Fake-IP / DNSMapping 没有提供域名时，从 HTTP Host、TLS SNI、QUIC 握手中补充恢复域名。
-# 原则：只识别、不改目标。V4.15 不预设 skip-domain；如未来出现可稳定复现的问题，再按最小范围加回例外。
+# 原则：只识别、不改目标。Mihomo V5.0 不预设 skip-domain；如未来出现可稳定复现的问题，再按最小范围加回例外。
 # 当前使用 Fake-IP，故不额外启用主要面向 Redir-Host DNSMapping 的 force-dns-mapping。
 sniffer:                                                  # 域名嗅探配置
   enable: true                                            # 启用 Sniffer，作为少数纯 IP / 缺失 DNSMapping 流量的兜底
@@ -125,7 +125,7 @@ dns:                                                      # Mihomo 内置 DNS �
 # ==============================================================================
 # 策略组
 # ==============================================================================
-# V4.15 不维护地区筛选、fallback、url-test 或共享“全部节点”组。
+# Mihomo V5.0 不维护地区筛选、fallback、url-test 或共享“全部节点”组。
 # 仅“默认代理”通过 include-all 收纳全部节点；业务组只在“默认代理”和“直连”之间选择。
 proxy-groups:                                             # 所有可在客户端手动选择的策略组
   - name: 🚀 默认代理                                     # 全局默认代理出口；不提供硬直连选项，语义保持“必走代理”
@@ -155,7 +155,7 @@ proxy-groups:                                             # 所有可在客户�
 # ==============================================================================
 # 分流规则
 # ==============================================================================
-# Mihomo 按从上到下顺序匹配，命中后停止继续匹配。V4.15 继续使用独立 Rule Provider，不依赖 GEOSITE/GEOIP。
+# Mihomo 按从上到下顺序匹配，命中后停止继续匹配。Mihomo V5.0 继续使用独立 Rule Provider，不依赖 GEOSITE/GEOIP。
 rules:                                                    # 实际流量分流规则；从上到下首个命中生效
   - RULE-SET,private_domain,直连                           # 私有域名优先硬直连，避免被进程或业务规则提前接管
   - RULE-SET,private_ip,直连,no-resolve                    # 私有/保留 IP 优先硬直连；补充 mixed/redir/tproxy 等未被 TUN 路由排除覆盖的流量
@@ -212,10 +212,10 @@ rule-anchor:                                              # Rule Provider 公共
   # yaml: &yaml {type: http, interval: 18000, behavior: classical, format: yaml}  # Adobe 桌面端规则启用时一并恢复
 
 rule-providers:                                          # rules 与 DNS Fake-IP Filter 引用的规则集总表
-  fakeip_compat: {<<: *domain, url: "https://raw.githubusercontent.com/steveyu8749/mihomo-config/main/mrs/FakeIPFilter.mrs"}  # Actions 生成的 Real-IP 兼容 MRS；源文件为 rules/FakeIPFilter.list
-  direct_domain: {<<: *domain, url: "https://raw.githubusercontent.com/steveyu8749/mihomo-config/main/mrs/Direct.mrs"}  # Actions 生成的硬直连域名 MRS；源文件为 rules/Direct.list
-  proxylite: {<<: *domain, url: "https://raw.githubusercontent.com/steveyu8749/mihomo-config/main/mrs/ProxyLite.mrs"}  # Actions 生成的代理域名 MRS；源文件为 rules/ProxyLite.list
-  proxy_ip: {<<: *ip, url: "https://raw.githubusercontent.com/steveyu8749/mihomo-config/main/mrs/ProxyIP.mrs"}  # Actions 生成的精确代理 IP MRS；源文件为 rules/ProxyIP.list
+  fakeip_compat: {<<: *domain, url: "https://raw.githubusercontent.com/steveyu8749/proxy-routing-config/main/mihomo/mrs/FakeIPFilter.mrs"}  # Actions 生成的 Real-IP 兼容 MRS；源文件为 rules/FakeIPFilter.list
+  direct_domain: {<<: *domain, url: "https://raw.githubusercontent.com/steveyu8749/proxy-routing-config/main/mihomo/mrs/Direct.mrs"}  # Actions 生成的硬直连域名 MRS；源文件为 rules/Direct.list
+  proxylite: {<<: *domain, url: "https://raw.githubusercontent.com/steveyu8749/proxy-routing-config/main/mihomo/mrs/ProxyLite.mrs"}  # Actions 生成的代理域名 MRS；源文件为 rules/ProxyLite.list
+  proxy_ip: {<<: *ip, url: "https://raw.githubusercontent.com/steveyu8749/proxy-routing-config/main/mihomo/mrs/ProxyIP.mrs"}  # Actions 生成的精确代理 IP MRS；源文件为 rules/ProxyIP.list
   # adobeisdumb: {<<: *yaml, url: "https://raw.githubusercontent.com/ignaciocastro/a-dove-is-dumb/refs/heads/main/clash.yaml"}  # 仅桌面端按需启用
   bing_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/bing.mrs"}  # Bing 独立域名集合
   msn_domain: {<<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/msn.mrs"}  # MSN 独立域名集合

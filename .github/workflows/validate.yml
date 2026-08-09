@@ -1,26 +1,34 @@
-name: Validate Mihomo template
+name: Validate proxy routing configs
 
 on:
   push:
     branches: [main]
     paths:
-      - "config.example.yaml"
+      - "mihomo/mihomo.yaml"
+      - "shadowrocket/shadowrocket.conf"
       - "README.md"
       - "CHANGELOG.md"
-      - "docs/design-notes.md"
+      - "docs/**"
       - "rules/**"
       - "scripts/validate_config.py"
       - "scripts/test_validator.py"
+      - "scripts/build_shadowrocket_rules.py"
+      - "scripts/validate_shadowrocket.py"
+      - "scripts/test_shadowrocket_validator.py"
       - ".github/workflows/validate.yml"
   pull_request:
     paths:
-      - "config.example.yaml"
+      - "mihomo/mihomo.yaml"
+      - "shadowrocket/shadowrocket.conf"
       - "README.md"
       - "CHANGELOG.md"
-      - "docs/design-notes.md"
+      - "docs/**"
       - "rules/**"
       - "scripts/validate_config.py"
       - "scripts/test_validator.py"
+      - "scripts/build_shadowrocket_rules.py"
+      - "scripts/validate_shadowrocket.py"
+      - "scripts/test_shadowrocket_validator.py"
       - ".github/workflows/validate.yml"
   workflow_dispatch:
 
@@ -54,11 +62,19 @@ jobs:
       - name: Install policy-validator dependency
         run: python -m pip install --disable-pip-version-check --no-cache-dir PyYAML==6.0.3
 
-      - name: Validate repository policy
-        run: python scripts/validate_config.py config.example.yaml
+      - name: Validate Mihomo repository policy
+        run: python scripts/validate_config.py mihomo/mihomo.yaml
 
       - name: Test policy-validator regressions
         run: python scripts/test_validator.py
+
+      - name: Generate and validate Shadowrocket rules
+        run: |
+          python scripts/build_shadowrocket_rules.py
+          python scripts/validate_shadowrocket.py shadowrocket/shadowrocket.conf
+
+      - name: Test Shadowrocket validator regressions
+        run: python scripts/test_shadowrocket_validator.py
 
       - name: Install pinned Mihomo core
         env:
@@ -104,16 +120,16 @@ jobs:
       - name: Validate with real Mihomo core
         run: |
           set -euo pipefail
-          workdir="${RUNNER_TEMP}/mihomo-config-test"
+          workdir="${RUNNER_TEMP}/proxy-routing-config-test"
           mkdir -p "${workdir}"
           "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/Direct.list" "${workdir}/Direct.mrs"
           "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/FakeIPFilter.list" "${workdir}/FakeIPFilter.mrs"
           "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/ProxyLite.list" "${workdir}/ProxyLite.mrs"
           "${MIHOMO_BIN}" convert-ruleset ipcidr text "${GITHUB_WORKSPACE}/rules/ProxyIP.list" "${workdir}/ProxyIP.mrs"
-          timeout 120s "${MIHOMO_BIN}" -t -d "${workdir}" -f "${GITHUB_WORKSPACE}/config.example.yaml"
+          timeout 120s "${MIHOMO_BIN}" -t -d "${workdir}" -f "${GITHUB_WORKSPACE}/mihomo/mihomo.yaml"
 
   publish-mrs:
-    name: Publish generated MRS
+    name: Publish generated rules
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-24.04
@@ -169,25 +185,28 @@ jobs:
           "${binary}" -v
           echo "MIHOMO_BIN=${binary}" >> "${GITHUB_ENV}"
 
-      - name: Generate MRS files
+      - name: Generate client rule files
         run: |
           set -euo pipefail
-          mkdir -p "${GITHUB_WORKSPACE}/mrs"
-          "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/Direct.list" "${GITHUB_WORKSPACE}/mrs/Direct.mrs"
-          "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/FakeIPFilter.list" "${GITHUB_WORKSPACE}/mrs/FakeIPFilter.mrs"
-          "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/ProxyLite.list" "${GITHUB_WORKSPACE}/mrs/ProxyLite.mrs"
-          "${MIHOMO_BIN}" convert-ruleset ipcidr text "${GITHUB_WORKSPACE}/rules/ProxyIP.list" "${GITHUB_WORKSPACE}/mrs/ProxyIP.mrs"
+          mkdir -p "${GITHUB_WORKSPACE}/mihomo/mrs"
+          "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/Direct.list" "${GITHUB_WORKSPACE}/mihomo/mrs/Direct.mrs"
+          "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/FakeIPFilter.list" "${GITHUB_WORKSPACE}/mihomo/mrs/FakeIPFilter.mrs"
+          "${MIHOMO_BIN}" convert-ruleset domain text "${GITHUB_WORKSPACE}/rules/ProxyLite.list" "${GITHUB_WORKSPACE}/mihomo/mrs/ProxyLite.mrs"
+          "${MIHOMO_BIN}" convert-ruleset ipcidr text "${GITHUB_WORKSPACE}/rules/ProxyIP.list" "${GITHUB_WORKSPACE}/mihomo/mrs/ProxyIP.mrs"
+          python scripts/build_shadowrocket_rules.py
 
-      - name: Commit generated MRS files
+      - name: Commit generated rule files
         run: |
           set -euo pipefail
-          if git diff --quiet -- mrs/ && [[ -z "$(git ls-files --others --exclude-standard -- mrs/)" ]]; then
-            echo "Generated MRS files are already up to date."
+          if git diff --quiet -- mihomo/mrs/ shadowrocket/rules/ && \
+             [[ -z "$(git ls-files --others --exclude-standard -- mihomo/mrs/ shadowrocket/rules/)" ]]; then
+            echo "Generated rule files are already up to date."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add mrs/Direct.mrs mrs/FakeIPFilter.mrs mrs/ProxyLite.mrs mrs/ProxyIP.mrs
-          git commit -m "Update generated MRS rules"
+          git add mihomo/mrs/Direct.mrs mihomo/mrs/FakeIPFilter.mrs mihomo/mrs/ProxyLite.mrs mihomo/mrs/ProxyIP.mrs
+          git add shadowrocket/rules/Direct.list shadowrocket/rules/ProxyLite.list shadowrocket/rules/ProxyIP.list
+          git commit -m "Update generated client rules"
           git push origin HEAD:main

@@ -1,8 +1,8 @@
-# Design Notes
+# Mihomo 设计说明
 
 ## 目标与优先级
 
-V4.15 面向手机与电脑本机运行 Mihomo 的场景。设计优先级依次是：
+Mihomo V5.0 面向手机与电脑本机运行 Mihomo 的场景。V5.0 的项目层变化是与 Shadowrocket 共存并迁移目录；本文件描述的 Mihomo 流量语义保持不变。设计优先级依次是：
 
 1. 分流语义正确；
 2. 手机与电脑行为尽量一致；
@@ -115,7 +115,7 @@ MetaCubeX `private.mrs` 包含基准测试网段 `198.18.0.0/15`，默认 Fake-I
 
 ### DNS 缓存算法
 
-`cache-algorithm` 支持默认 LRU 和可选 ARC。V4.15 保持参数缺省，继续使用 LRU。没有设备侧缓存命中数据时，不假定 ARC 一定更优，也不为未经验证的收益增加配置分支。
+`cache-algorithm` 支持默认 LRU 和可选 ARC。V5.0 保持参数缺省，继续使用 LRU。没有设备侧缓存命中数据时，不假定 ARC 一定更优，也不为未经验证的收益增加配置分支。
 
 ## Sniffer
 
@@ -181,7 +181,7 @@ youtube            → google
 geolocation-!cn    → cn_domain
 ```
 
-V4.15 的自维护 `direct_domain` 位于全部专用业务域名之后、ProxyLite 之前。它是硬直连补充集，不是日常直连全集：普通中国域名和中国 IP 由 `cn_domain` / `cn_ip` 处理。当前 36 条完整覆盖原有的 ScienceDirect、Elsevier、Clarivate / Web of Science 资源，并补充高频科研入口，用于校园或机构出口 IP 认证；不复制 PT、下载进程、国内大厂域名或完整 Scholar 大类。
+V5.0 的自维护 `direct_domain` 位于全部专用业务域名之后、ProxyLite 之前。它是硬直连补充集，不是日常直连全集：普通中国域名和中国 IP 由 `cn_domain` / `cn_ip` 处理。当前 36 条完整覆盖原有的 ScienceDirect、Elsevier、Clarivate / Web of Science 资源，并补充高频科研入口，用于校园或机构出口 IP 认证；不复制 PT、下载进程、国内大厂域名或完整 Scholar 大类。
 
 ProxyLite 继续位于全部专用业务域名和 Direct 之后。V4.14 将它纳入当前仓库，改为可直接转 MRS 的 domain text 集合。用户仍可扩展内容，因此无法预先证明其范围永远足够窄；将它放在 Bing、OneDrive、GitHub、Microsoft、Apple 等规则前面，会有遮蔽专用策略组的风险。它仍位于 GFW、地域和中国域名等宽泛集合之前。
 
@@ -223,20 +223,20 @@ MRS 只支持 `domain` 与 `ipcidr` behavior。因此启用中的自维护文本
 
 ### MRS 产物发布
 
-`rules/` 是唯一可编辑的规则源，`mrs/` 是可丢弃、可重建的二进制产物目录。校验 job 保持 `contents: read`，在临时目录完成四份 text → MRS 转换与主配置核心检查。只有当它成功后，`main` 上的 `publish-mrs` job 才获得 job 级 `contents: write`，重新生成并提交：
+`rules/` 是唯一可编辑的规则源，`mihomo/mrs/` 是可丢弃、可重建的二进制产物目录。校验 job 保持 `contents: read`，在临时目录完成四份 text → MRS 转换与主配置核心检查。只有当它成功后，`main` 上的 `publish-mrs` job 才获得 job 级 `contents: write`，重新生成并提交：
 
 ```text
-rules/Direct.list       → mrs/Direct.mrs
-rules/FakeIPFilter.list → mrs/FakeIPFilter.mrs
-rules/ProxyLite.list    → mrs/ProxyLite.mrs
-rules/ProxyIP.list      → mrs/ProxyIP.mrs
+rules/Direct.list       → mihomo/mrs/Direct.mrs
+rules/FakeIPFilter.list → mihomo/mrs/FakeIPFilter.mrs
+rules/ProxyLite.list    → mihomo/mrs/ProxyLite.mrs
+rules/ProxyIP.list      → mihomo/mrs/ProxyIP.mrs
 ```
 
-PR 不运行写入 job。工作流的路径触发器只监听源文件和配置，不监听 `mrs/`，所以 bot 生成提交不会再次启动自己。生成结果未变化时不产生空提交。
+PR 不运行写入 job。工作流的路径触发器只监听源文件和配置，不监听 `mihomo/mrs/`，所以 bot 生成提交不会再次启动自己。生成结果未变化时不产生空提交。
 
 ## 为什么不用 GeoData
 
-V4.15 不配置 `GEOSITE`、`GEOIP`、`geodata-mode`、`geo-auto-update` 或 `geox-url`。
+V5.0 不配置 `GEOSITE`、`GEOIP`、`geodata-mode`、`geo-auto-update` 或 `geox-url`。
 
 主要考虑：
 

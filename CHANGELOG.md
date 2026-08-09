@@ -1,5 +1,16 @@
 # Changelog
 
+## V5.0
+
+- 项目从 `mihomo-config` 重构为 `proxy-routing-config`，定位由单一 Mihomo 模板扩展为多客户端代理分流配置。
+- Mihomo 主配置迁移为 `mihomo/mihomo.yaml`，生成的 MRS 迁移到 `mihomo/mrs/`；所有自维护 Rule Provider URL、校验器、测试和 Actions 路径同步更新。
+- 新增 `shadowrocket/shadowrocket.conf`：节点与配置分离，使用 blackmatrix7 的 Shadowrocket 原生规则，不包含进程、Adobe、MITM、重写或 Mihomo YAML 的机械转换。
+- 小火箭使用与 Mihomo 对应的 14 个策略组和 25 条有序规则；OneDrive / GitHub 先于 Microsoft，YouTube 先于 Google，本地规则先于 Global / China 地域兜底。
+- 新增共享规则转换器，将 Direct、ProxyLite、ProxyIP 自动生成 Shadowrocket classical 列表；生成文件不保留源注释。
+- 小火箭 `always-real-ip` 与 `rules/FakeIPFilter.list` 逐项同步，继续只保留已确认的 Fake-IP 兼容故障，不增加 NTP 或宽泛国内外域名例外。
+- 新增 Shadowrocket 配置校验器和 6 个故障注入测试；Actions 在 Mihomo 全套校验之外同步生成并发布两端规则产物。
+- README 改为项目级入口，并拆分 Mihomo 与 Shadowrocket 设计说明、导入步骤、能力边界和维护流程。
+
 ## V4.15
 
 - 新增由 GitHub Actions 维护的 `mrs/` 产物目录，自动生成 `Direct.mrs`、`FakeIPFilter.mrs`、`ProxyLite.mrs` 和 `ProxyIP.mrs`。
