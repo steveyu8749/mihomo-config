@@ -1,5 +1,10 @@
 # Changelog
 
+## V4.10
+
+- 为 Wi-Fi Calling 增加 `+.pub.3gppnetwork.org` Real-IP 例外，覆盖运营商 ePDG 主机及其 UDP 500/4500 IKE/IPsec 建链需求。
+- 保持最小范围，不使用会额外覆盖其他 3GPP 服务的 `+.3gppnetwork.org`；README、设计说明、校验器与回归测试同步更新。
+
 ## V4.9
 
 - 以 V2Fly `domain-list-community`、MetaCubeX MRS 与 blackmatrix7 Scholar / Direct 交叉复核 `rules/Direct.list`；确认现有 21 条已完整覆盖原来的 ScienceDirect、Elsevier、Clarivate（含 `sci`）三组数据，不把普通学术站点、PT、下载进程或厂商大类误并入硬直连列表。

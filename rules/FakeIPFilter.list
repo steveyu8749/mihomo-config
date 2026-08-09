@@ -20,6 +20,10 @@ dns.msftncsi.com
 # 小米系统服务：已知应用商店/天气等组件在 Fake-IP 下可能无法正常工作。
 +.market.xiaomi.com
 
+# Wi-Fi Calling：ePDG 使用运营商编码的 *.pub.3gppnetwork.org 主机建立 IKE/IPsec；
+# 手机拿到 Fake-IP 时可能无法发起 UDP 500/4500 隧道。
++.pub.3gppnetwork.org
+
 # Plex：*.plex.direct 会按设备返回局域网地址，用 Fake-IP 替换会破坏本地安全直连。
 +.plex.direct
 

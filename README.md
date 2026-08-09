@@ -2,7 +2,7 @@
 
 [![Validate Mihomo template](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml/badge.svg)](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml)
 
-一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.9**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
+一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.10**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
 
 这不是机场订阅转换模板，也不是自动测速方案。节点由用户手工选择，配置专注于分流语义和跨客户端一致性。
 
@@ -155,12 +155,15 @@ dns.msftncsi.com
 +.xn--ngstr-lra8j.com
 +.push.apple.com
 +.market.xiaomi.com
++.pub.3gppnetwork.org
 +.plex.direct
 ```
 
 `+.googleapis.cn` 已包含 `services.googleapis.cn` 及其余子域，与 `+.xn--ngstr-lra8j.com` 一起处理部分 Android / 国行环境下 Google Play 下载等待或 CDN 选择异常；相关现象可参考 [OpenWrt-nikki #278](https://github.com/nikkinikki-org/OpenWrt-nikki/discussions/278)、[OpenClash #4443](https://github.com/vernesong/OpenClash/issues/4443) 与 [gfwlist #2472](https://github.com/gfwlist/gfwlist/issues/2472)。这些域名返回真实 IP 后仍由 `google_domain`、`google_ip` 和后续规则决定出口，不会因为进入 Fake-IP Filter 就自动直连。
 
 其余例外也只解决明确的地址依赖：Windows NCSI 会验证 DNS 探测结果；APNs 系统连接可能需要可直接使用的真实端点；`plex.direct` 本身会解析到 Plex 服务器的局域网地址，Fake-IP 会破坏本地安全直连；小米项保留应用商店与天气组件的已知兼容处理。可分别参照 [Microsoft NCSI 指南](https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/troubleshoot-ncsi-guidance)、[Apple APNs 网络要求](https://support.apple.com/guide/deployment/configure-devices-to-work-with-apns-dep2de55389a/web) 与 [Plex 安全连接说明](https://support.plex.tv/articles/206225077-how-to-use-secure-server-connections/)。
+
+`+.pub.3gppnetwork.org` 专门处理 Wi-Fi Calling。手机会访问形如 `ss.epdg.epc.mnc260.mcc310.pub.3gppnetwork.org` 的运营商 ePDG 主机，并通过 UDP 500/4500 建立 IKE/IPsec 隧道；Fake-IP 可能使隧道无法发起。已有 [OpenClash #3884](https://github.com/vernesong/OpenClash/issues/3884) 记录了 Fake-IP 失败、切换 Redir-Host 后恢复的完整复现。这里没有使用范围更大的 `+.3gppnetwork.org`。
 
 Xbox 的四种传统主机模式保留为 `FakeIPFilter.list` 中的注释候选，没有默认启用。多份现有列表都包含它们，但 Mihomo 社区目前只能支持“P2P / NAT / QoS 场景可能需要真实端点”这一判断，不能证明默认使用 Fake-IP 必然故障。只有实际出现联机、派对语音或 NAT 检测异常，并确认根因是 Fake-IP 时才启用；Xbox 的日常分流仍由独立的 `xbox_domain` 和 `🪟 Microsoft` 组处理。
 
@@ -190,7 +193,7 @@ MetaCubeX 的 `private.mrs` 包含 `198.18.0.0/15`，而默认 Fake-IP 池 `198.
 
 ### `cache-algorithm`
 
-Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.9 不显式设置 `cache-algorithm`，继续使用默认 LRU。
+Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.10 不显式设置 `cache-algorithm`，继续使用默认 LRU。
 
 ARC 并不等于无条件更快。没有观测到 DNS 缓存频繁抖动、也没有针对设备内存与访问模式做测量时，增加该参数只会扩大配置变量，难以证明实际收益。如果以后有明确的缓存命中问题，可以单独测试：
 
@@ -215,7 +218,7 @@ HTTP Host、TLS SNI 与 QUIC 握手信息只用于补充域名识别和规则匹
 
 ## 分流规则
 
-Mihomo 从上到下匹配，命中后停止。V4.9 的顺序是：
+Mihomo 从上到下匹配，命中后停止。V4.10 的顺序是：
 
 1. 私有域名与私有 IP；
 2. 进程规则；
@@ -336,7 +339,7 @@ HTTP Rule Provider 每 24 小时更新。模板没有给它们设置 `proxy`，�
 
 这与 Proxy Provider 不同：机场订阅需要先提供代理节点，所以模板为它明确设置硬直连，避免循环依赖。
 
-所有启用的 MetaCubeX MRS URL 已在本次 V4.9 复审中检查存在性，格式与声明的 `behavior` 一致；两个自维护文本列表会在 CI 中额外转换为 MRS，以验证 Mihomo 能实际解析。
+所有启用的 MetaCubeX MRS URL 已在本次 V4.10 复审中检查存在性，格式与声明的 `behavior` 一致；两个自维护文本列表会在 CI 中额外转换为 MRS，以验证 Mihomo 能实际解析。
 
 ## Adobe：默认完全关闭
 
