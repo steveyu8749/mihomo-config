@@ -12,7 +12,7 @@ from yaml.nodes import MappingNode
 from yaml.resolver import BaseResolver
 
 
-TEMPLATE_VERSION = "V4.12"
+TEMPLATE_VERSION = "V4.13"
 PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 DEFAULT_PROXY = "🚀 默认代理"
 HARD_DIRECT = "直连"
@@ -565,12 +565,21 @@ def validate_proxy_providers(
         if not isinstance(health, dict):
             fail(errors, f"proxy-provider {name!r} must define health-check")
             continue
-        if health.get("enable") is not True:
-            fail(errors, f"proxy-provider {name!r} health-check must be enabled")
-        if health.get("interval") != 600:
-            fail(errors, f"proxy-provider {name!r} health-check interval must be 600 seconds")
-        if health.get("url") != "https://www.gstatic.com/generate_204":
-            fail(errors, f"proxy-provider {name!r} uses an unexpected health-check URL")
+        expected_health = {
+            "enable": True,
+            "url": "https://www.gstatic.com/generate_204",
+            "interval": 1800,
+            "lazy": True,
+        }
+        for key, value in expected_health.items():
+            if health.get(key) != value:
+                fail(errors, f"proxy-provider {name!r} health-check.{key} must be {value!r}")
+        validate_exact_keys(
+            health,
+            set(expected_health),
+            f"proxy-provider {name!r} health-check",
+            errors,
+        )
 
 
 def validate_groups(

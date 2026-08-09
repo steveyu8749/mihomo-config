@@ -1,5 +1,13 @@
 # Changelog
 
+## V4.13
+
+- 将机场 Provider 健康检查从 600 秒调整为 1800 秒，并显式启用 `lazy: true`；手工选点场景减少约三分之二的周期探测，不改变订阅刷新、当前节点或分流结果。
+- 审查实际使用的 `steveyu8749/1/ProxyLite.list`：从 30 条收敛为 9 条，删除重复项、已由专用/MRS 规则覆盖的条目和不再使用的国外 DNS 清单。
+- 将会继续误匹配 `zhubajie` 的 `DOMAIN-KEYWORD,bajie` 替换为 `bajie1.com` 与 `bajiexinxi.net` 两个明确后缀，使此前删除 `zhubajie` 的意图真正生效。
+- 保留五个个人域名补充项和两个精确 `/32` IP 例外；未改变 ProxyLite 位于专用服务之后、宽泛地域规则之前的优先级。
+- 配置、README、设计说明、校验器和故障注入测试同步升级为 V4.13。
+
 ## V4.12
 
 - 完成最终全量审查：逐项检查主配置、规则顺序、Provider 引用与 25 个启用的 MetaCubeX MRS，并使用 Mihomo v1.19.29 转换两个自维护文本列表验证核心可读性。

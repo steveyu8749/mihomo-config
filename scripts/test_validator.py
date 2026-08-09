@@ -99,6 +99,14 @@ def add_strict_route(text: str) -> str:
     return replace_once(text, anchor, replacement)
 
 
+def disable_lazy_health_check(text: str) -> str:
+    return replace_once(
+        text,
+        "      lazy: true                                          # 仅在 Provider 节点被实际使用时执行周期检查，降低移动端后台开销",
+        "      lazy: false                                         # regression test: background checks always active",
+    )
+
+
 def remove_mode_comment(text: str) -> str:
     old = "mode: rule                                                # 使用规则模式；DIRECT / PROXY 由下方 rules 与策略组决定"
     return replace_once(text, old, "mode: rule")
@@ -156,6 +164,12 @@ TEST_CASES: list[tuple[str, str, Callable[[str], str], str]] = [
         "config.example.yaml",
         add_strict_route,
         "tun.strict-route must remain omitted",
+    ),
+    (
+        "eager provider health checks",
+        "config.example.yaml",
+        disable_lazy_health_check,
+        "health-check.lazy must be True",
     ),
     (
         "invalid process regex",
