@@ -1,5 +1,14 @@
 # Changelog
 
+## V4.11
+
+- 将 Google Play Real-IP 例外从 `+.googleapis.cn` 收窄为 `+.services.googleapis.cn`，避免无故覆盖其他 Google API 子域；继续保留 IDN CDN 后缀。
+- 增加 `+.msftconnecttest.com`，与 `dns.msftncsi.com` 一起覆盖 Windows NCSI 的 HTTP 联网/强制门户探测和 DNS 探测；仅改变 DNS 返回，不附带硬直连规则。
+- 增加 Windows、Apple、Android、Google Public NTP、NTP Pool 与常用国内时间源的窄范围 Real-IP 例外；明确不使用 `time.*.com`、`ntp*.com` 等宽泛模式。
+- 增加腾讯登录与微信的三个 `localhost` 回调，保留其本地地址语义；不扩展到整类腾讯域名。
+- `rules/Direct.list` 增加 15 个常用科研出版、检索和 DOI 入口，总数由 21 条增至 36 条；仍不复制 `cn_domain`、PT、下载进程或普通厂商大类。
+- README、设计说明、配置注释、校验器与回归测试同步升级为 V4.11。
+
 ## V4.10
 
 - 为 Wi-Fi Calling 增加 `+.pub.3gppnetwork.org` Real-IP 例外，覆盖运营商 ePDG 主机及其 UDP 500/4500 IKE/IPsec 建链需求。

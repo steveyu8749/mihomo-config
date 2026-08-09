@@ -12,7 +12,7 @@ from yaml.nodes import MappingNode
 from yaml.resolver import BaseResolver
 
 
-TEMPLATE_VERSION = "V4.10"
+TEMPLATE_VERSION = "V4.11"
 PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 DEFAULT_PROXY = "🚀 默认代理"
 HARD_DIRECT = "直连"
@@ -98,12 +98,27 @@ CUSTOM_DOMAIN_PROVIDER_PATHS = {
 
 REQUIRED_FAKEIP_COMPAT = {
     "dns.msftncsi.com",
-    "+.googleapis.cn",
+    "+.msftconnecttest.com",
+    "+.services.googleapis.cn",
     "+.xn--ngstr-lra8j.com",
     "+.push.apple.com",
     "+.market.xiaomi.com",
     "+.pub.3gppnetwork.org",
     "+.plex.direct",
+    "time.apple.com",
+    "time-macos.apple.com",
+    "time.windows.com",
+    "time.android.com",
+    "time.google.com",
+    "+.pool.ntp.org",
+    "ntp.aliyun.com",
+    "ntp1.aliyun.com",
+    "ntp.tencent.com",
+    "ntp.ntsc.ac.cn",
+    "cn.ntp.org.cn",
+    "localhost.ptlogin2.qq.com",
+    "localhost.sec.qq.com",
+    "localhost.*.weixin.qq.com",
 }
 
 REQUIRED_DIRECT_DOMAINS = {
@@ -128,6 +143,21 @@ REQUIRED_DIRECT_DOMAINS = {
     "+.newisiknowledge.com",
     "+.webofknowledge.com",
     "+.webofscience.com",
+    "+.acm.org",
+    "+.doi.org",
+    "+.ieee.org",
+    "+.jstor.org",
+    "+.nature.com",
+    "+.oup.com",
+    "+.proquest.com",
+    "+.science.org",
+    "+.sciencemag.org",
+    "+.springer.com",
+    "+.springerlink.com",
+    "+.springernature.com",
+    "+.tandfonline.com",
+    "+.taylorandfrancis.com",
+    "+.wiley.com",
 }
 
 REQUIRED_RULES = {
@@ -510,7 +540,7 @@ def validate_maintained_rule_files(root: Path, errors: list[str]) -> None:
     ):
         fail(
             errors,
-            "rules/FakeIPFilter.list must contain exactly the seven audited compatibility entries",
+            "rules/FakeIPFilter.list must contain exactly the 22 audited compatibility entries",
         )
 
 

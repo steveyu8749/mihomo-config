@@ -2,7 +2,7 @@
 
 ## 目标与优先级
 
-V4.10 面向手机与电脑本机运行 Mihomo 的场景。设计优先级依次是：
+V4.11 面向手机与电脑本机运行 Mihomo 的场景。设计优先级依次是：
 
 1. 分流语义正确；
 2. 手机与电脑行为尽量一致；
@@ -73,21 +73,38 @@ fake-ip-filter:
 
 ```text
 dns.msftncsi.com
-+.googleapis.cn
++.msftconnecttest.com
++.services.googleapis.cn
 +.xn--ngstr-lra8j.com
 +.push.apple.com
 +.market.xiaomi.com
 +.pub.3gppnetwork.org
 +.plex.direct
+time.apple.com
+time-macos.apple.com
+time.windows.com
+time.android.com
+time.google.com
++.pool.ntp.org
+ntp.aliyun.com
+ntp1.aliyun.com
+ntp.tencent.com
+ntp.ntsc.ac.cn
+cn.ntp.org.cn
+localhost.ptlogin2.qq.com
+localhost.sec.qq.com
+localhost.*.weixin.qq.com
 ```
 
-`+.googleapis.cn` 覆盖 `services.googleapis.cn` 等 Google 中国前端，与 IDN CDN 后缀共同处理部分 Android / 国行环境的下载等待和 CDN 选择异常；`plex.direct` 则必须保留其返回局域网地址的 DNS 语义。Real-IP 只改变 DNS 返回值，最终仍由域名/IP规则与后续兜底决定出口。
+Google Play 例外收窄为 `+.services.googleapis.cn` 与 IDN CDN 后缀，不再用 `+.googleapis.cn` 覆盖其他无需兼容处理的 API 子域。`+.msftconnecttest.com` 恢复 Windows HTTP 联网/门户探测的真实地址，`dns.msftncsi.com` 负责 DNS 探测；这两项不附带 DIRECT 路由语义。`plex.direct` 则必须保留其返回局域网地址的 DNS 语义。
+
+NTP 组覆盖 Windows、Apple、Android、Google Public NTP、NTP Pool 与常用国内时间源。Fake-IP 可以映射 UDP，因此不把“所有 NTP 必须 Real-IP”写成核心限制；本模板加入它们，是因为系统校时可能早于代理/TUN 完全就绪，而且作为基础服务返回真实目标的副作用很低。避免使用 `time.*.com`、`ntp*.com` 等过宽模式。腾讯登录与微信的 `localhost` 回调同样必须保留本地地址语义。
 
 `+.pub.3gppnetwork.org` 只覆盖 Wi-Fi Calling 使用的公共 ePDG 命名空间。其 IKE/IPsec 连接使用 UDP 500/4500，已有实际案例确认 Fake-IP 下无法发起、Redir-Host 下恢复；不扩大到整个 `+.3gppnetwork.org`。
 
 传统列表中的四种 Xbox 主机模式只作为文件内注释候选。它们在多个项目中反复出现，但这些列表存在继承关系，现有讨论也只能确认游戏 P2P / NAT / QoS 场景可能需要真实地址，尚不足以证明默认 Fake-IP 必然导致故障。只有用户实际复现并确认根因后才启用。
 
-不恢复整个 `cn_domain -> real-ip`，也不加入 NTP、通用 STUN、普通游戏、音乐、普通国内外域名或厂商大类例外。ShellCrash、qichiyuhub、wwqgtxx 和 silver716 的常见列表存在继承关系，因此按故障机制筛选而不是取并集。只有“应用拿到 Fake-IP 会发生可复现功能故障”才能进入该列表；单纯需要 DIRECT / PROXY 不是准入理由。
+不恢复整个 `cn_domain -> real-ip`，也不加入通用 STUN、普通游戏、音乐、普通国内外域名或厂商大类例外。ShellCrash、qichiyuhub、wwqgtxx 和 silver716 的常见列表存在继承关系，因此按故障机制筛选而不是取并集。只有存在明确地址语义或跨设备基础服务需要时才进入该列表；单纯需要 DIRECT / PROXY 不是准入理由。
 
 ### `private_ip` 与 `198.18.0.0/15`
 
@@ -107,7 +124,7 @@ MetaCubeX `private.mrs` 包含基准测试网段 `198.18.0.0/15`，默认 Fake-I
 
 ### DNS 缓存算法
 
-`cache-algorithm` 支持默认 LRU 和可选 ARC。V4.10 保持参数缺省，继续使用 LRU。没有设备侧缓存命中数据时，不假定 ARC 一定更优，也不为未经验证的收益增加配置分支。
+`cache-algorithm` 支持默认 LRU 和可选 ARC。V4.11 保持参数缺省，继续使用 LRU。没有设备侧缓存命中数据时，不假定 ARC 一定更优，也不为未经验证的收益增加配置分支。
 
 ## Sniffer
 
@@ -173,7 +190,7 @@ youtube            → google
 geolocation-!cn    → cn_domain
 ```
 
-V4.10 的自维护 `direct_domain` 位于全部专用业务域名之后、ProxyLite 之前。其 21 条规则与 V2Fly `domain-list-community` 的 ScienceDirect、Elsevier、Clarivate / Web of Science（含 `sci`）当前内容完整一致，并以 MetaCubeX MRS 与 blackmatrix7 Scholar / Direct 交叉检查。后者混入普通学术站点、厂商域、PT 和进程规则，因此没有求并集合并。以后只增加现有公共分类遗漏且确认必须硬直连的域名。
+V4.11 的自维护 `direct_domain` 位于全部专用业务域名之后、ProxyLite 之前。原有 21 条完整覆盖 V2Fly `domain-list-community` 的 ScienceDirect、Elsevier、Clarivate / Web of Science（含 `sci`）；另增加 15 个同时见于主流 Scholar/Direct 上游的高频科研入口，用于校园或机构出口 IP 认证。没有合并 PT、下载进程、国内大厂域名或完整 Scholar 大类。
 
 ProxyLite 继续位于全部专用业务域名和 Direct 之后。ProxyLite 是用户可编辑的 classical 集合，无法预先证明其范围足够窄；将它放在 Bing、OneDrive、GitHub、Microsoft、Apple 等规则前面，会有遮蔽专用策略组的风险。它仍位于 GFW、地域和中国域名等宽泛集合之前。
 
@@ -210,7 +227,7 @@ Adobe classical YAML 规则默认关闭。桌面端如需启用，必须同时�
 
 ## 为什么不用 GeoData
 
-V4.10 不配置 `GEOSITE`、`GEOIP`、`geodata-mode`、`geo-auto-update` 或 `geox-url`。
+V4.11 不配置 `GEOSITE`、`GEOIP`、`geodata-mode`、`geo-auto-update` 或 `geox-url`。
 
 主要考虑：
 

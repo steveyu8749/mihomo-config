@@ -7,11 +7,13 @@
 # 参考 ShellCrash、qichiyuhub、wwqgtxx 与 silver716 的现有列表时，按故障机制重新
 # 审核而不是求并集；这些项目之间存在继承关系，重复出现不单独视为有效证据。
 
-# Windows NCSI：DNS 探测需要取得预期的真实 A 记录。
+# Windows NCSI：DNS 探测需要取得预期的真实 A 记录；HTTP 探测用于联网状态
+# 与强制门户识别。Real-IP 只恢复探测语义，不强制其流量走 DIRECT。
 dns.msftncsi.com
++.msftconnecttest.com
 
-# Google Play：覆盖 services.googleapis.cn 等中国前端；配合下列 CDN 域解决下载等待。
-+.googleapis.cn
+# Google Play：只覆盖已确认使用的中国服务前端；不扩大到整个 googleapis.cn。
++.services.googleapis.cn
 +.xn--ngstr-lra8j.com
 
 # Apple APNs：系统推送连接可能绕过 VPN/TUN，需要可直接使用的真实目标地址。
@@ -26,6 +28,25 @@ dns.msftncsi.com
 
 # Plex：*.plex.direct 会按设备返回局域网地址，用 Fake-IP 替换会破坏本地安全直连。
 +.plex.direct
+
+# 系统校时：NTP 使用 UDP 123，部分系统服务可能在代理/TUN 完全就绪前启动。
+# 这里只列主流系统默认入口与常用公共池，不使用 time.*.com / ntp*.com 等宽泛模式。
+time.apple.com
+time-macos.apple.com
+time.windows.com
+time.android.com
+time.google.com
++.pool.ntp.org
+ntp.aliyun.com
+ntp1.aliyun.com
+ntp.tencent.com
+ntp.ntsc.ac.cn
+cn.ntp.org.cn
+
+# 腾讯本地回调：这些主机名的 localhost 语义不能被 Fake-IP 替换。
+localhost.ptlogin2.qq.com
+localhost.sec.qq.com
+localhost.*.weixin.qq.com
 
 # Xbox 候选（默认不启用）：传统列表普遍包含以下主机形态，但现有资料只能说明
 # P2P / NAT / QoS 场景“可能”需要真实端点，尚不足以作为默认例外。仅在 Xbox

@@ -2,7 +2,7 @@
 
 [![Validate Mihomo template](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml/badge.svg)](https://github.com/steveyu8749/mihomo-config/actions/workflows/validate.yml)
 
-一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.10**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
+一份面向手机与电脑本机使用的 Mihomo TUN 配置模板。当前版本为 **V4.11**，目标是让 DNS、TUN、Sniffer、规则顺序和策略组之间的关系保持清晰、稳定、可验证。
 
 这不是机场订阅转换模板，也不是自动测速方案。节点由用户手工选择，配置专注于分流语义和跨客户端一致性。
 
@@ -147,27 +147,44 @@ fake-ip-filter:
 | `fakeip_compat -> real-ip` | 少量经过确认的兼容项返回真实地址 |
 | `MATCH -> fake-ip` | 其余域名，包括普通国内域名，统一返回 Fake-IP |
 
-`fakeip_compat` 由 [`rules/FakeIPFilter.list`](./rules/FakeIPFilter.list) 维护，当前只包含：
+`fakeip_compat` 由 [`rules/FakeIPFilter.list`](./rules/FakeIPFilter.list) 维护，当前包含以下经过筛选的兼容项：
 
 ```text
 dns.msftncsi.com
-+.googleapis.cn
++.msftconnecttest.com
++.services.googleapis.cn
 +.xn--ngstr-lra8j.com
 +.push.apple.com
 +.market.xiaomi.com
 +.pub.3gppnetwork.org
 +.plex.direct
+time.apple.com
+time-macos.apple.com
+time.windows.com
+time.android.com
+time.google.com
++.pool.ntp.org
+ntp.aliyun.com
+ntp1.aliyun.com
+ntp.tencent.com
+ntp.ntsc.ac.cn
+cn.ntp.org.cn
+localhost.ptlogin2.qq.com
+localhost.sec.qq.com
+localhost.*.weixin.qq.com
 ```
 
-`+.googleapis.cn` 已包含 `services.googleapis.cn` 及其余子域，与 `+.xn--ngstr-lra8j.com` 一起处理部分 Android / 国行环境下 Google Play 下载等待或 CDN 选择异常；相关现象可参考 [OpenWrt-nikki #278](https://github.com/nikkinikki-org/OpenWrt-nikki/discussions/278)、[OpenClash #4443](https://github.com/vernesong/OpenClash/issues/4443) 与 [gfwlist #2472](https://github.com/gfwlist/gfwlist/issues/2472)。这些域名返回真实 IP 后仍由 `google_domain`、`google_ip` 和后续规则决定出口，不会因为进入 Fake-IP Filter 就自动直连。
+Google Play 只保留 `+.services.googleapis.cn` 与 `+.xn--ngstr-lra8j.com`。没有使用范围更大的 `+.googleapis.cn`：它虽然包含前者，但也会让其他无需兼容处理的 Google API 子域退出 Fake-IP，不符合最小例外原则。相关现象可参考 [OpenWrt-nikki #278](https://github.com/nikkinikki-org/OpenWrt-nikki/discussions/278)、[OpenClash #4443](https://github.com/vernesong/OpenClash/issues/4443) 与 [gfwlist #2472](https://github.com/gfwlist/gfwlist/issues/2472)。这些域名返回真实 IP 后仍由 `google_domain`、`google_ip` 和后续规则决定出口，不会因为进入 Fake-IP Filter 就自动直连。
 
-其余例外也只解决明确的地址依赖：Windows NCSI 会验证 DNS 探测结果；APNs 系统连接可能需要可直接使用的真实端点；`plex.direct` 本身会解析到 Plex 服务器的局域网地址，Fake-IP 会破坏本地安全直连；小米项保留应用商店与天气组件的已知兼容处理。可分别参照 [Microsoft NCSI 指南](https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/troubleshoot-ncsi-guidance)、[Apple APNs 网络要求](https://support.apple.com/guide/deployment/configure-devices-to-work-with-apns-dep2de55389a/web) 与 [Plex 安全连接说明](https://support.plex.tv/articles/206225077-how-to-use-secure-server-connections/)。
+其余例外也只解决明确的地址依赖：Windows NCSI 使用 `www.msftconnecttest.com` 完成 HTTP 联网/强制门户探测，并查询 `dns.msftncsi.com`；APNs 系统连接可能需要可直接使用的真实端点；`plex.direct` 本身会解析到 Plex 服务器的局域网地址，Fake-IP 会破坏本地安全直连；小米项保留应用商店与天气组件的已知兼容处理。可分别参照 [Microsoft NCSI 过程说明](https://learn.microsoft.com/en-us/troubleshoot/windows-client/networking/internet-explorer-edge-open-connect-corporate-public-network)、[Apple APNs 网络要求](https://support.apple.com/guide/deployment/configure-devices-to-work-with-apns-dep2de55389a/web) 与 [Plex 安全连接说明](https://support.plex.tv/articles/206225077-how-to-use-secure-server-connections/)。`+.msftconnecttest.com` 是兼容性保险，不表示正确接管的 Fake-IP TUN 必然无法通过 NCSI，也不会强制该流量直连。
+
+NTP 例外覆盖 Windows、Apple、Android、Google Public NTP、NTP Pool 以及常用国内时间源。NTP 使用 UDP 123，Fake-IP 本身并非不支持 UDP；这里返回真实 IP 的理由是系统校时可能早于代理/TUN 完全就绪，且真实目标对系统基础服务更稳妥。列表刻意不使用 `time.*.com`、`ntp*.com` 之类容易误匹配普通网站的宽泛模式。腾讯登录和微信的三个 `localhost` 回调则必须保留本地地址语义。
 
 `+.pub.3gppnetwork.org` 专门处理 Wi-Fi Calling。手机会访问形如 `ss.epdg.epc.mnc260.mcc310.pub.3gppnetwork.org` 的运营商 ePDG 主机，并通过 UDP 500/4500 建立 IKE/IPsec 隧道；Fake-IP 可能使隧道无法发起。已有 [OpenClash #3884](https://github.com/vernesong/OpenClash/issues/3884) 记录了 Fake-IP 失败、切换 Redir-Host 后恢复的完整复现。这里没有使用范围更大的 `+.3gppnetwork.org`。
 
 Xbox 的四种传统主机模式保留为 `FakeIPFilter.list` 中的注释候选，没有默认启用。多份现有列表都包含它们，但 Mihomo 社区目前只能支持“P2P / NAT / QoS 场景可能需要真实端点”这一判断，不能证明默认使用 Fake-IP 必然故障。只有实际出现联机、派对语音或 NAT 检测异常，并确认根因是 Fake-IP 时才启用；Xbox 的日常分流仍由独立的 `xbox_domain` 和 `🪟 Microsoft` 组处理。
 
-不会引入整套第三方 Fake-IP Filter，也不增加 NTP、通用 STUN、普通游戏、音乐、普通国内外域名或整类厂商集合。网上常见的 ShellCrash、qichiyuhub、wwqgtxx 与 silver716 列表之间存在继承关系，重复出现不能代替故障证据。只有出现可稳定复现、并确认根因是“应用收到 Fake-IP”而不是路由出口错误时，才加入最小范围的例外。
+不会引入整套第三方 Fake-IP Filter，也不增加通用 STUN、普通游戏、音乐、普通国内外域名或整类厂商集合。网上常见的 ShellCrash、qichiyuhub、wwqgtxx 与 silver716 列表之间存在继承关系，重复出现不能代替故障证据。只有存在明确地址语义或跨设备基础服务需要时，才加入最小范围的例外。
 
 Real-IP 例外不决定出口。例如 `push.apple.com` 返回真实 IP 后，实际连接仍会命中 `🍎 Apple` 规则。
 
@@ -193,7 +210,7 @@ MetaCubeX 的 `private.mrs` 包含 `198.18.0.0/15`，而默认 Fake-IP 池 `198.
 
 ### `cache-algorithm`
 
-Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.10 不显式设置 `cache-algorithm`，继续使用默认 LRU。
+Mihomo 支持 `lru` 与 `arc`：默认是 LRU，ARC 是可选算法。V4.11 不显式设置 `cache-algorithm`，继续使用默认 LRU。
 
 ARC 并不等于无条件更快。没有观测到 DNS 缓存频繁抖动、也没有针对设备内存与访问模式做测量时，增加该参数只会扩大配置变量，难以证明实际收益。如果以后有明确的缓存命中问题，可以单独测试：
 
@@ -218,7 +235,7 @@ HTTP Host、TLS SNI 与 QUIC 握手信息只用于补充域名识别和规则匹
 
 ## 分流规则
 
-Mihomo 从上到下匹配，命中后停止。V4.10 的顺序是：
+Mihomo 从上到下匹配，命中后停止。V4.11 的顺序是：
 
 1. 私有域名与私有 IP；
 2. 进程规则；
@@ -244,7 +261,7 @@ ProxyLite 位于所有专用业务域名之后、GFW / 地域规则之前。自�
 
 ### 自维护 Direct
 
-[`rules/Direct.list`](./rules/Direct.list) 使用 `behavior: domain` 与 `format: text`。初始 21 条规则合并了原来的 ScienceDirect、Elsevier、Clarivate / Web of Science 三个 Provider，因此主配置只保留一个下载入口和一条路由规则：
+[`rules/Direct.list`](./rules/Direct.list) 使用 `behavior: domain` 与 `format: text`。当前 36 条规则由两部分组成：原有 ScienceDirect、Elsevier、Clarivate / Web of Science 21 条，以及 15 个常用科研出版、检索和 DOI 入口。主配置只需一个下载入口和一条路由规则：
 
 ```yaml
 - RULE-SET,direct_domain,直连
@@ -252,7 +269,7 @@ ProxyLite 位于所有专用业务域名之后、GFW / 地域规则之前。自�
 
 它位于全部专用业务规则之后、ProxyLite 与宽泛地域规则之前。这样新增的普通直连例外会优先于 ProxyLite，但不会抢走 Google、Microsoft、Apple、OneDrive 等已经明确分组的服务。
 
-这 21 条已与 [V2Fly `domain-list-community`](https://github.com/v2fly/domain-list-community/tree/master/data) 的 `sciencedirect`、`elsevier`、`clarivate`（含 `sci`）逐条核对，也与 [MetaCubeX MRS](https://github.com/MetaCubeX/meta-rules-dat/tree/meta/geo/geosite) 和 [blackmatrix7 Scholar](https://github.com/blackmatrix7/ios_rule_script/tree/master/rule/Clash/Scholar) 交叉比较。当前没有扩大列表：blackmatrix7 的 Direct / Scholar 还包含普通学术站点、Google、Apple、PT 与进程规则，它们并不等于“必须硬直连”。
+新增部分选择了 DOI、ACM、IEEE、JSTOR、Nature、Oxford、ProQuest、Science、Springer、Taylor & Francis 和 Wiley 等高频入口，并与 [V2Fly `category-scholar-!cn`](https://github.com/v2fly/domain-list-community/blob/master/data/category-scholar-!cn) 和 [blackmatrix7 Scholar / Direct](https://github.com/blackmatrix7/ios_rule_script/tree/master/rule/Clash/Scholar) 交叉核对。它们适合依赖校园或机构出口 IP 认证的环境；没有这类需求时可以按需删除新增分组。
 
 不要把完整 `cn_domain`、`cn_ip` 已覆盖的内容复制进来。只有明确要求硬直连、现有 Provider 没有正确处理的域名才应加入；如果一个域名需要独立策略组，就不应放进 Direct。
 
@@ -339,7 +356,7 @@ HTTP Rule Provider 每 24 小时更新。模板没有给它们设置 `proxy`，�
 
 这与 Proxy Provider 不同：机场订阅需要先提供代理节点，所以模板为它明确设置硬直连，避免循环依赖。
 
-所有启用的 MetaCubeX MRS URL 已在本次 V4.10 复审中检查存在性，格式与声明的 `behavior` 一致；两个自维护文本列表会在 CI 中额外转换为 MRS，以验证 Mihomo 能实际解析。
+所有启用的 MetaCubeX MRS URL 已在本次 V4.11 复审中检查存在性，格式与声明的 `behavior` 一致；两个自维护文本列表会在 CI 中额外转换为 MRS，以验证 Mihomo 能实际解析。
 
 ## Adobe：默认完全关闭
 

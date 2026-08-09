@@ -7,8 +7,9 @@
 #
 # 当前基线逐项展开自 V2Fly domain-list-community 的 sciencedirect、elsevier、
 # clarivate（含 sci）数据；MetaCubeX 的同名 MRS 由该数据生成。另以
-# blackmatrix7 的 Scholar / Direct 列表交叉检查，但不合并其中普通学术站点、
-# PT、下载进程或厂商大类，避免把“可能适合直连”误写成“必须硬直连”。
+# blackmatrix7 的 Scholar / Direct 列表交叉检查。除原有三组资源外，只选取
+# 多个上游共同收录、常用于机构 IP 认证的主流科研入口；不合并 PT、下载进程、
+# 国内大厂域名或普通厂商大类。
 #
 # 上游参考（复核日期：2026-08-08）：
 # https://github.com/v2fly/domain-list-community/tree/master/data
@@ -44,3 +45,21 @@
 +.newisiknowledge.com
 +.webofknowledge.com
 +.webofscience.com
+
+# 常用科研出版与检索入口
+# 适合依赖校园/机构出口 IP 授权的环境；若你的机构不要求直连认证，可按需删除。
++.acm.org
++.doi.org
++.ieee.org
++.jstor.org
++.nature.com
++.oup.com
++.proquest.com
++.science.org
++.sciencemag.org
++.springer.com
++.springerlink.com
++.springernature.com
++.tandfonline.com
++.taylorandfrancis.com
++.wiley.com
