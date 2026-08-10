@@ -12,7 +12,7 @@ from yaml.nodes import MappingNode
 from yaml.resolver import BaseResolver
 
 
-TEMPLATE_VERSION = "V5.0"
+TEMPLATE_VERSION = "V5.1"
 PLACEHOLDER_UUID = "00000000-0000-4000-8000-000000000000"
 DEFAULT_PROXY = "🚀 默认代理"
 HARD_DIRECT = "直连"

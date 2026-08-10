@@ -1,5 +1,14 @@
 # Changelog
 
+## V5.1
+
+- 重新按当前 Shadowrocket 社区手册与 blackmatrix7 上游结构审核小火箭配置。
+- 修复 Apple、Global、China 只加载 classical `.list` 的覆盖缺口；按上游要求新增三份 `*_Domain.list`，分别使用 `DOMAIN-SET` 与原 `RULE-SET` 共同加载。
+- 新增 `udp-policy-not-supported-behaviour = REJECT`，避免代理策略的 UDP 在节点不支持时静默降级为直连。
+- 新增最小 `tun-excluded-routes` 与显式 `prefer-ipv6 = false`，改善局域网、组播、广播和 mDNS，同时避免旁路 Fake-IP 地址池或可能影响 Tailscale 的 CGNAT 网段。
+- Shadowrocket 有序规则由 25 条增至 28 条；校验器新增 DOMAIN-SET、TUN 旁路、IPv6 偏好、UDP 回退和 Apple Domain Set 完整性检查，故障注入测试由 6 个增至 10 个。
+- 新增 `docs/shadowrocket-config-guide.md`，逐项说明 General、Proxy Group、Rule、Host 的实际行为、配置理由、与常见模板的差异、限制和导入后检查方法。
+
 ## V5.0
 
 - 项目从 `mihomo-config` 重构为 `proxy-routing-config`，定位由单一 Mihomo 模板扩展为多客户端代理分流配置。

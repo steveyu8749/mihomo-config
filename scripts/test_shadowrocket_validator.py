@@ -31,6 +31,38 @@ TEST_CASES: list[tuple[str, Callable[[str], str], str]] = [
         "always-real-ip must exactly mirror",
     ),
     (
+        "unsafe UDP direct fallback",
+        lambda text: replace_once(
+            text,
+            "udp-policy-not-supported-behaviour = REJECT",
+            "udp-policy-not-supported-behaviour = DIRECT",
+        ),
+        "udp-policy-not-supported-behaviour must be 'REJECT'",
+    ),
+    (
+        "IPv6 preference re-enabled",
+        lambda text: replace_once(text, "prefer-ipv6 = false", "prefer-ipv6 = true"),
+        "prefer-ipv6 must be 'false'",
+    ),
+    (
+        "Fake-IP range bypassed from TUN",
+        lambda text: replace_once(
+            text,
+            "192.168.0.0/16, 224.0.0.0/4",
+            "192.168.0.0/16, 198.18.0.0/15, 224.0.0.0/4",
+        ),
+        "tun-excluded-routes does not match",
+    ),
+    (
+        "missing Apple domain set",
+        lambda text: replace_once(
+            text,
+            "DOMAIN-SET,https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Shadowrocket/Apple/Apple_Domain.list,🍎 Apple\n",
+            "",
+        ),
+        "content or priority differs",
+    ),
+    (
         "OneDrive shadowed by Microsoft",
         lambda text: replace_once(
             text,

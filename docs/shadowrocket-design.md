@@ -26,6 +26,10 @@ select, policy-regex-filter=.*
 
 普通 DNS 使用 AliDNS 和 DNSPod DoH，直连与故障回退使用系统 DNS。`always-real-ip` 只包含共享 `rules/FakeIPFilter.list` 中已经确认的兼容项。
 
+代理规则所选节点不支持 UDP 时使用 `udp-policy-not-supported-behaviour = REJECT`，避免“必须代理”的 UDP 静默降级为直连。代价是节点不支持 UDP 时相关业务会直接失败，应通过更换节点解决。
+
+TUN 只旁路当前设备确实需要的私网、Loopback、链路本地、组播、广播与 IPv6 mDNS。`198.18.0.0/15` 与 Fake-IP 地址空间重叠，`100.64.0.0/10` 可能影响 Tailscale，因此两者都不加入旁路。Lan 规则仍作为域名和纯 IP 分流层的补充。
+
 两种语法之间的映射是：
 
 ```text
@@ -46,15 +50,17 @@ Real-IP 例外不会强制目标直连。DNS 返回方式与最终路由出口�
 3. OneDrive、GitHub；
 4. Bing、Xbox、Microsoft；
 5. YouTube、Google；
-6. Apple、TikTok、Speedtest、Telegram、Netflix、PayPal；
+6. Apple Domain Set + classical、TikTok、Speedtest、Telegram、Netflix、PayPal；
 7. 本仓库 Direct、ProxyLite、ProxyIP；
-8. blackmatrix7 Global、China；
+8. blackmatrix7 Global Domain Set + classical、China Domain Set + classical；
 9. `GEOIP,CN,DIRECT`；
 10. `FINAL,🐟 漏网之鱼`。
 
 专用服务必须位于宽泛父集合之前。例如 OneDrive 与 GitHub 都先于 Microsoft，YouTube 先于 Google。Bing 与 Xbox 单独列出是为了可读性和后续独立调整；MSN 已由 Microsoft 集合覆盖，当前三者都进入相同策略组，因此没有必要额外转换一份重复规则。
 
-Global 作为境外常见规则层，China 加 `GEOIP,CN` 作为日常国内兜底。GEOIP 有意不加 `no-resolve`：未命中域名规则的少量目标仍可解析后按中国 IP 直连，这与 Mihomo 的 `cn_ip` 设计一致。没有使用体积明显更大的 ChinaMaxNoIP，因为本配置已经有 IP 兜底，额外规则量对日常命中收益有限。
+blackmatrix7 将 Apple、Global、China 拆成纯域名的 `Name_Domain.list` 与包含关键词、UA、IP 等类型的 `Name.list`，上游明确要求两者共同使用。配置分别以 `DOMAIN-SET` 和 `RULE-SET` 加载，缺少任意一半都会造成覆盖不完整。Apple 位于 Global 前，确保重叠的 Apple 域名继续默认直连。
+
+Global 作为境外常见规则层，China 加 `GEOIP,CN` 作为日常国内兜底。两份 Domain Set 在 2026-08-10 的审核结果中无精确重叠；classical 列表存在少量 IP / UA 交集，由更靠前的 Global 优先处理。GEOIP 有意不加 `no-resolve`：未命中域名规则的少量目标仍可解析后按中国 IP 直连，这与 Mihomo 的 `cn_ip` 设计一致。没有使用体积明显更大的 ChinaMaxNoIP，因为本配置已经有 IP 兜底，额外规则量对日常命中收益有限。
 
 ## 自维护规则转换
 
@@ -83,11 +89,13 @@ domain behavior 的 `+.` 转为 `DOMAIN-SUFFIX`，普通完整域名转为 `DOMA
 `scripts/validate_shadowrocket.py` 检查：
 
 - 只出现 General、Proxy Group、Rule、Host 四个段；
-- DNS、Real-IP、更新 URL 与项目约定一致；
+- DNS、Real-IP、TUN 旁路、UDP 回退、更新 URL 与项目约定一致；
 - 策略组名称、默认顺序和节点收纳方式正确；
-- 25 条规则内容和优先级没有漂移；
+- 28 条规则内容和优先级没有漂移；
 - 所有规则目标都存在；
 - 配置不包含节点、进程规则或 Adobe；
-- RULE-SET 只通过 GitHub raw HTTPS 下载。
+- RULE-SET / DOMAIN-SET 只通过 GitHub raw HTTPS 下载。
 
-`scripts/test_shadowrocket_validator.py` 通过故障注入验证这些限制确实能拦截回归。它是仓库策略检查，不替代 Shadowrocket 应用本身的导入测试；首次发布后仍应在真实 iPhone 上完成一次远程更新、DNS、各策略组和常用服务的烟雾测试。
+`scripts/test_shadowrocket_validator.py` 通过故障注入验证这些限制确实能拦截回归，包括 Apple Domain Set 缺失与 UDP 降级直连。它是仓库策略检查，不替代 Shadowrocket 应用本身的导入测试；首次发布后仍应在真实 iPhone 上完成一次远程更新、DNS、各策略组和常用服务的烟雾测试。
+
+逐项参数、规则差异与排障方法见 [`shadowrocket-config-guide.md`](./shadowrocket-config-guide.md)。

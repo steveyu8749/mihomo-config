@@ -44,6 +44,7 @@ EXPECTED_RULES = [
     f"RULE-SET,{BLACKMATRIX_RAW}/Microsoft/Microsoft.list,🪟 Microsoft",
     f"RULE-SET,{BLACKMATRIX_RAW}/YouTube/YouTube.list,📹 YouTube",
     f"RULE-SET,{BLACKMATRIX_RAW}/Google/Google.list,🍀 Google",
+    f"DOMAIN-SET,{BLACKMATRIX_RAW}/Apple/Apple_Domain.list,🍎 Apple",
     f"RULE-SET,{BLACKMATRIX_RAW}/Apple/Apple.list,🍎 Apple",
     f"RULE-SET,{BLACKMATRIX_RAW}/TikTok/TikTok.list,🎵 TikTok",
     f"RULE-SET,{BLACKMATRIX_RAW}/Speedtest/Speedtest.list,✈️ Speedtest",
@@ -53,7 +54,9 @@ EXPECTED_RULES = [
     f"RULE-SET,{PROJECT_RAW}/shadowrocket/rules/Direct.list,DIRECT",
     f"RULE-SET,{PROJECT_RAW}/shadowrocket/rules/ProxyLite.list,{DEFAULT_PROXY}",
     f"RULE-SET,{PROJECT_RAW}/shadowrocket/rules/ProxyIP.list,{DEFAULT_PROXY}",
+    f"DOMAIN-SET,{BLACKMATRIX_RAW}/Global/Global_Domain.list,{DEFAULT_PROXY}",
     f"RULE-SET,{BLACKMATRIX_RAW}/Global/Global.list,{DEFAULT_PROXY}",
+    f"DOMAIN-SET,{BLACKMATRIX_RAW}/China/China_Domain.list,DIRECT",
     f"RULE-SET,{BLACKMATRIX_RAW}/China/China.list,DIRECT",
     "GEOIP,CN,DIRECT",
     f"FINAL,{FALLBACK_GROUP}",
@@ -130,6 +133,8 @@ def fakeip_source_rules(errors: list[str]) -> list[str]:
 def validate_general(values: dict[str, str], errors: list[str]) -> None:
     expected_keys = {
         "ipv6",
+        "prefer-ipv6",
+        "tun-excluded-routes",
         "dns-server",
         "direct-dns-server",
         "fallback-dns-server",
@@ -137,6 +142,7 @@ def validate_general(values: dict[str, str], errors: list[str]) -> None:
         "icmp-auto-reply",
         "always-real-ip",
         "hijack-dns",
+        "udp-policy-not-supported-behaviour",
         "update-url",
     }
     for key in sorted(expected_keys - set(values)):
@@ -146,10 +152,12 @@ def validate_general(values: dict[str, str], errors: list[str]) -> None:
 
     expected_scalars = {
         "ipv6": "false",
+        "prefer-ipv6": "false",
         "direct-dns-server": "system",
         "fallback-dns-server": "system",
         "private-ip-answer": "true",
         "icmp-auto-reply": "true",
+        "udp-policy-not-supported-behaviour": "REJECT",
         "update-url": f"{PROJECT_RAW}/shadowrocket/shadowrocket.conf",
     }
     for key, expected in expected_scalars.items():
@@ -161,6 +169,17 @@ def validate_general(values: dict[str, str], errors: list[str]) -> None:
         "https://doh.pub/dns-query",
     ]:
         fail(errors, "[General] dns-server does not match the audited domestic DoH design")
+    if csv(values.get("tun-excluded-routes", "")) != [
+        "10.0.0.0/8",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "224.0.0.0/4",
+        "255.255.255.255/32",
+        "ff02::fb/128",
+    ]:
+        fail(errors, "[General] tun-excluded-routes does not match the audited LAN bypass design")
     if csv(values.get("hijack-dns", "")) != ["8.8.8.8:53", "8.8.4.4:53"]:
         fail(errors, "[General] hijack-dns must cover the two hard-coded Google DNS endpoints")
 
@@ -206,13 +225,13 @@ def validate_rules(lines: list[tuple[int, str]], targets: set[str], errors: list
         if "adobe" in lowered:
             fail(errors, f"line {line_number}: iOS config must not contain Adobe rules")
         parts = [item.strip() for item in rule.split(",")]
-        if parts[0] == "RULE-SET":
+        if parts[0] in {"RULE-SET", "DOMAIN-SET"}:
             if len(parts) != 3:
-                fail(errors, f"line {line_number}: malformed RULE-SET rule")
+                fail(errors, f"line {line_number}: malformed {parts[0]} rule")
                 continue
             parsed = urlparse(parts[1])
             if parsed.scheme != "https" or parsed.netloc != "raw.githubusercontent.com":
-                fail(errors, f"line {line_number}: RULE-SET URL must use GitHub raw HTTPS")
+                fail(errors, f"line {line_number}: remote rule URL must use GitHub raw HTTPS")
             target = parts[2]
         elif parts[0] == "GEOIP":
             if parts != ["GEOIP", "CN", "DIRECT"]:

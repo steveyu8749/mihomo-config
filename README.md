@@ -2,7 +2,7 @@
 
 [![Validate proxy routing configs](https://github.com/steveyu8749/proxy-routing-config/actions/workflows/validate.yml/badge.svg)](https://github.com/steveyu8749/proxy-routing-config/actions/workflows/validate.yml)
 
-一套同时面向 **Mihomo** 与 **Shadowrocket（小火箭）** 的个人代理分流配置。当前项目版本为 **V5.0**。
+一套同时面向 **Mihomo** 与 **Shadowrocket（小火箭）** 的个人代理分流配置。当前项目版本为 **V5.1**。
 
 项目不追求把两种客户端机械转换成完全相同的文件，而是共享同一套分流意图：Mihomo 使用 MetaCubeX MRS 和完整的 TUN / DNS / 进程能力；小火箭使用 blackmatrix7 原生规则，并复用本仓库维护的 Direct、ProxyLite、ProxyIP 和 Fake-IP 兼容规则。
 
@@ -11,7 +11,7 @@
 | 客户端 | 配置入口 | 适用设备 | 主要特点 |
 | --- | --- | --- | --- |
 | Mihomo | [`mihomo/mihomo.yaml`](./mihomo/mihomo.yaml) | Windows、macOS、Linux、Android | TUN、Fake-IP、Sniffer、进程分流、MRS |
-| Shadowrocket | [`shadowrocket/shadowrocket.conf`](./shadowrocket/shadowrocket.conf) | iPhone、iPad | 节点与配置分离、原生 RULE-SET、轻量服务分流 |
+| Shadowrocket | [`shadowrocket/shadowrocket.conf`](./shadowrocket/shadowrocket.conf) | iPhone、iPad | 节点与配置分离、原生 RULE-SET / DOMAIN-SET、轻量服务分流 |
 
 两端都不包含真实订阅、节点或凭据。公开文件可以安全复用，但填写过订阅地址的本地副本不要提交到仓库。
 
@@ -53,7 +53,7 @@
 | Microsoft 子类 | OneDrive、GitHub、Bing、MSN、Xbox 优先 | OneDrive、GitHub、Bing、Xbox 优先；MSN 由 Microsoft 覆盖 |
 | 其他服务 | Google、YouTube、Apple、Telegram 等专用 MRS | 对应 blackmatrix7 原生 Shadowrocket 列表 |
 | 本仓库规则 | Direct、ProxyLite、ProxyIP | 同一规则源自动转换后的 classical 列表 |
-| 地域兜底 | GFW、`geolocation-!cn`、CN 域名/IP | Global、China、`GEOIP,CN` |
+| 地域兜底 | GFW、`geolocation-!cn`、CN 域名/IP | Global / China 的 Domain 与 classical 两部分、`GEOIP,CN` |
 | 最终兜底 | `MATCH,🐟 漏网之鱼` | `FINAL,🐟 漏网之鱼` |
 
 blackmatrix7 与 MetaCubeX 的数据不会逐条完全一致，但它们都来自持续维护的主流规则生态。对日常使用而言，保持清晰的优先级和可维护边界，比强行追求两个不同客户端逐条一致更可靠。
@@ -131,10 +131,13 @@ Adobe 规则在 Mihomo 文件中只保留注释后的桌面启用入口，默认
 - `🚀 默认代理` 只使用 `policy-regex-filter=.*` 收纳已导入节点，同时不混入显式策略或 `DIRECT`。
 - 业务组只在 `🚀 默认代理` 与 `DIRECT` 间切换；Apple 顺序相反，默认直连。
 - `always-real-ip` 必须与 `rules/FakeIPFilter.list` 保持一致，校验器会阻止遗漏。
-- 公共规则直接使用 blackmatrix7 的 Shadowrocket `.list`；不下载超大的 `ChinaMaxNoIP`，使用较轻的 China 加 `GEOIP,CN` 兜底。
+- 公共规则使用 blackmatrix7 的 Shadowrocket 原生格式；Apple、Global、China 按上游要求同时加载 Domain Set 与 classical 两部分，避免只载入 IP / UA 等规则而遗漏主体域名。
+- 不下载超大的 `ChinaMaxNoIP`，使用 China Domain/Classical 加 `GEOIP,CN` 兜底。
+- 代理节点不支持 UDP 时使用 `REJECT`，避免“必须代理”的 UDP 静默降级为直连。
+- 使用最小 TUN 旁路改善私网、组播、广播与 mDNS；不旁路 Fake-IP 地址池，也不预防性排除可能影响 Tailscale 的 `100.64.0.0/10`。
 - 没有 `[Proxy]`、MITM、重写、脚本、进程或 Adobe 规则，降低首次使用和后续维护复杂度。
 
-更多边界见 [`docs/shadowrocket-design.md`](./docs/shadowrocket-design.md)。
+架构边界见 [`docs/shadowrocket-design.md`](./docs/shadowrocket-design.md)；每个配置段、参数和规则的具体理由见 [`docs/shadowrocket-config-guide.md`](./docs/shadowrocket-config-guide.md)。
 
 ## 自动生成与校验
 
@@ -144,7 +147,7 @@ GitHub Actions 固定使用 Mihomo **v1.19.29** 和 PyYAML 6.0.3。每次相关�
 2. 四份共享规则的 text → MRS 转换；
 3. Mihomo 核心 `-t` 真实配置检查；
 4. Shadowrocket 三份 classical 规则生成；
-5. 小火箭配置校验与 6 个故障注入测试。
+5. 小火箭配置校验与 10 个故障注入测试。
 
 只有 `main` 上全部检查通过后，写入 job 才能提交生成物。PR 始终只读，`mihomo/mrs/` 和 `shadowrocket/rules/` 不在触发路径中，因此机器人提交不会形成循环。
 
@@ -179,6 +182,7 @@ mihomo -t -d /tmp/proxy-routing-config-test -f mihomo/mihomo.yaml
 | [`scripts/`](./scripts/) | 生成器、校验器与回归测试 |
 | [`docs/mihomo-design.md`](./docs/mihomo-design.md) | Mihomo 机制与取舍 |
 | [`docs/shadowrocket-design.md`](./docs/shadowrocket-design.md) | 小火箭架构与使用边界 |
+| [`docs/shadowrocket-config-guide.md`](./docs/shadowrocket-config-guide.md) | 小火箭逐节配置说明、与常见模板的差异及排障方法 |
 | [`.github/workflows/validate.yml`](./.github/workflows/validate.yml) | CI 校验与生成物发布流程 |
 
 ## 维护原则
