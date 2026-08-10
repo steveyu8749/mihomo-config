@@ -138,6 +138,8 @@ proxy-groups:                                             # 所有可在客户�
     type: select                                          # 完全手工选择
     proxies: [🚀 默认代理, 直连]                           # 优先继承默认代理，也允许切换到硬直连出站
 
+  - {name: 🍎 Apple, type: select, proxies: [直连, 🚀 默认代理]}  # Apple 服务默认硬直连，异常时可切默认代理
+
   - {<<: *service, name: 🤖 ChatGPT}                      # ChatGPT 及其他境外 AI 服务共用策略组
   - {<<: *service, name: 📹 YouTube}                      # YouTube 独立策略组
   - {<<: *service, name: 🍀 Google}                       # Google / Android FCM 独立策略组
@@ -150,7 +152,6 @@ proxy-groups:                                             # 所有可在客户�
   - {<<: *service, name: ✈️ Speedtest}                    # Speedtest 独立策略组
   - {<<: *service, name: 💶 PayPal}                       # PayPal 独立策略组
 
-  - {name: 🍎 Apple, type: select, proxies: [直连, 🚀 默认代理]}  # Apple 服务默认硬直连，异常时可切默认代理
 
 # ==============================================================================
 # 分流规则
