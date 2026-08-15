@@ -109,6 +109,19 @@ ProxyLite 是个人代理补充，不是主分类库。它放在全部专用服�
 - 公共跨平台模板不启用 `strict-route`。它加强系统路由接管与防泄漏，不会让规则“匹配得更严格”，并可能影响 Windows 虚拟化或多宿主网络。确有防泄漏需求时可在个人副本按平台开启。
 - Sniffer 只恢复域名，不覆盖原始目标；没有预设 `skip-domain`。只有出现稳定可复现的误嗅探时，才增加最小范围例外。
 
+### Clash Mi Android：小米互传
+
+在 HyperOS / Android 上使用 Clash Mi 时，已实测一种客户端层兼容性：Clash Mi VPN 开启且「允许应用绕过 VPN」关闭时，设备互联与妙享桌面仍可正常，但「小米互传」向 iPad 发送文件会失败；临时开启「允许应用绕过 VPN」后可立即恢复。Android `VpnService` 默认不允许应用绕过 VPN，而 [`allowBypass()`](https://developer.android.com/reference/android/net/VpnService.Builder#allowBypass()) 会允许应用把进程或 socket 绑定到底层 Wi-Fi / P2P 网络；小米互传的[设备发现与连接](https://privacy.mi.com/MiShare-share/zh_CN/)又会使用 IP 地址和 P2P 地址，因此这个现象更符合 Android VPN 与互传数据通道的客户端兼容问题，而不是通用 Mihomo 路由规则缺失。
+
+本项目不把这个兼容项写进 `mihomo.yaml`。推荐在 Clash Mi 的「分应用代理」里处理：
+
+- 启用「分应用代理」；
+- 关闭「白名单模式」，让已勾选应用绕过 VPN、其余应用继续进入 VPN；
+- 只勾选「小米互传」`com.miui.mishare.connectivity`；
+- 保持全局「允许应用绕过 VPN」关闭。
+
+该组合已实测可恢复向 iPad 的文件互传，同时避免给其他 App 全局绕过 VPN 的能力。若系统版本或 ROM 行为变化，优先重新做「允许应用绕过 VPN」开 / 关的 A/B 测试，再决定是否扩大排除范围。
+
 ### 进程规则与 OneDrive
 
 Mihomo 保留少量桌面/Android 进程规则：
@@ -136,6 +149,12 @@ Adobe 规则在 Mihomo 文件中只保留注释后的桌面启用入口，默认
 - 代理节点不支持 UDP 时使用 `REJECT`，避免“必须代理”的 UDP 静默降级为直连。
 - 使用最小 TUN 旁路改善私网、组播、广播与 mDNS；不旁路 Fake-IP 地址池，也不预防性排除可能影响 Tailscale 的 `100.64.0.0/10`。
 - 没有 `[Proxy]`、MITM、重写、脚本、进程或 Adobe 规则，降低首次使用和后续维护复杂度。
+
+### iPadOS 状态栏 VPN 图标
+
+Shadowrocket 当前没有正规的「隐藏 VPN 图标」开关。开发者从 v2.1.74 起移除了该设置；其[开发者频道](https://t.me/s/ShadowrocketNews?before=346)后续给出的兼容 workaround 是在当前配置的 TUN 旁路路由中加入 `0.0.0.0/31`，并明确注明不保证一定生效。
+
+本项目不会把这个 workaround 写进 `shadowrocket.conf`：它只改变界面显示，不改善代理能力，却会额外改变系统路由。为了稳定性和可解释性，默认保留 iPadOS 的 VPN 状态图标；若只是为了隐藏图标，不建议修改配置。
 
 架构边界见 [`docs/shadowrocket-design.md`](./docs/shadowrocket-design.md)；每个配置段、参数和规则的具体理由见 [`docs/shadowrocket-config-guide.md`](./docs/shadowrocket-config-guide.md)。
 
