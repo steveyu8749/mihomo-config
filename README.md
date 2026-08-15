@@ -113,7 +113,18 @@ ProxyLite 是个人代理补充，不是主分类库。它放在全部专用服�
 
 在 HyperOS / Android 上使用 Clash Mi 时，已实测一种客户端层兼容性：Clash Mi VPN 开启且「允许应用绕过 VPN」关闭时，设备互联与妙享桌面仍可正常，但「小米互传」向 iPad 发送文件会失败；临时开启「允许应用绕过 VPN」后可立即恢复。Android `VpnService` 默认不允许应用绕过 VPN，而 [`allowBypass()`](https://developer.android.com/reference/android/net/VpnService.Builder#allowBypass()) 会允许应用把进程或 socket 绑定到底层 Wi-Fi / P2P 网络；小米互传的[设备发现与连接](https://privacy.mi.com/MiShare-share/zh_CN/)又会使用 IP 地址和 P2P 地址，因此这个现象更符合 Android VPN 与互传数据通道的客户端兼容问题，而不是通用 Mihomo 路由规则缺失。
 
-本项目不把这个兼容项写进 `mihomo.yaml`。推荐在 Clash Mi 的「分应用代理」里处理：
+Mihomo 核心本身支持在 Android TUN 中直接按包名排除应用，标准字段是 `exclude-package`。官方文档说明 Android 用户与应用规则只在 Android 下生效，并且需要 `auto-route`。对裸 Mihomo 或会保留 `auto-route: true` 的 Android 客户端，可以直接写：
+
+```yaml
+tun:
+  auto-route: true
+  exclude-package:
+    - com.miui.mishare.connectivity
+```
+
+这是合法的 Mihomo 配置文件方案，但本项目不推荐把它写进公共 `mihomo.yaml`。原因是当前 Clash Mi Android 会在客户端适配层关闭 `auto-route`，而公共模板还要兼顾桌面端和其他 Mihomo 客户端；把单一 ROM / 单一应用的包名例外固化到跨平台模板，会让配置语义依赖具体客户端。Mihomo 的 Android 应用排除字段与限制可见 [`TUN` 官方文档](https://wiki.metacubex.one/en/config/inbound/tun/)。
+
+因此，在 Clash Mi 上仍推荐使用客户端自己的「分应用代理」：
 
 - 启用「分应用代理」；
 - 关闭「白名单模式」，让已勾选应用绕过 VPN、其余应用继续进入 VPN；
